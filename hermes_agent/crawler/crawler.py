@@ -2,12 +2,13 @@ from hermes_agent.browser.client import BrowserClient
 from hermes_agent.browser.extractor import Extractor
 from hermes_agent.browser.navigator import Navigator
 from hermes_agent.browser.page import PageClient
+from hermes_agent.models.page import WebPage
 
 
 class WebCrawler:
     """Simple web crawler."""
 
-    def fetch(self, url: str) -> dict[str, str]:
+    def fetch(self, url: str) -> WebPage:
         browser_client = BrowserClient()
 
         try:
@@ -21,12 +22,12 @@ class WebCrawler:
 
             extractor = Extractor(page)
 
-            result = {
-                "url": navigator.url,
-                "title": extractor.title(),
-                "text": extractor.text(),
-                "html": extractor.html(),
-            }
+            result = WebPage(
+                url=navigator.url,
+                title=extractor.title(),
+                text=extractor.text(),
+                html=extractor.html(),
+            )
 
             page_client.close()
 
