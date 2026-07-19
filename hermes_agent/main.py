@@ -14,7 +14,7 @@ def main() -> None:
         page = page_client.open()
 
         navigator = Navigator(page)
-        navigator.goto("https://example.com")
+        navigator.goto("https://website.it.kr/")
 
         extractor = Extractor(page)
 
