@@ -27,7 +27,11 @@ def test_add_and_search():
         ],
     )
 
-    results = store.search([1.0, 0.0], top_k=1)
+    results = store.search(
+        [1.0, 0.0],
+        top_k=2,
+    )
 
-    assert len(results) == 1
+    assert len(results) == 2
     assert results[0].content == "Apple"
+    assert results[1].content == "Banana"

@@ -1,4 +1,5 @@
 from hermes_agent.rag.chunk import Chunk
+from hermes_agent.utils.math import cosine_similarity
 
 from .base import VectorStore
 
@@ -22,8 +23,13 @@ class MemoryVectorStore(VectorStore):
         embedding: list[float],
         top_k: int = 5,
     ) -> list[Chunk]:
-        if not self._items:
-            return []
 
-        # 임시 구현
-        return [chunk for chunk, _ in self._items[:top_k]]
+        scored = []
+
+        for chunk, vector in self._items:
+            score = cosine_similarity(embedding, vector)
+            scored.append((score, chunk))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        return [chunk for _, chunk in scored[:top_k]]
