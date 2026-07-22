@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from urllib.parse import urlparse
+from hermes_agent.crawler import URLNormalizer
 
 from hermes_agent.crawler import (
     CrawlManager,
@@ -127,6 +128,7 @@ def run_crawl(
             if use_filter
             else None
         ),
+        url_normalizer=URLNormalizer(),
     )
 
     report = manager.crawl_with_report(

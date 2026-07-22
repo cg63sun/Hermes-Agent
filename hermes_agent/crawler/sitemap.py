@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 from urllib.parse import urljoin
 from xml.etree import ElementTree
 
@@ -10,6 +11,7 @@ class SitemapLoader:
     DEFAULT_SITEMAP_PATHS = (
         "sitemap.xml",
         "wp-sitemap.xml",
+        "sitemap.xml.gz",
     )
 
     def __init__(
@@ -127,8 +129,26 @@ class SitemapLoader:
 
         response.raise_for_status()
 
+        response_text = getattr(
+            response,
+            "text",
+            "",
+        )
+
+        response_content = getattr(
+            response,
+            "content",
+            response_text.encode("utf-8"),
+        )
+
+        xml_content = self._response_text(
+            sitemap_url=sitemap_url,
+            content=response_content,
+            text=response_text,
+        )
+
         sitemap_type, urls = self.parse_document(
-            response.text,
+            xml_content,
         )
 
         if sitemap_type != "index":
@@ -155,6 +175,27 @@ class SitemapLoader:
         return self._remove_duplicates(
             page_urls,
         )
+    
+
+    def _response_text(
+        self,
+        sitemap_url: str,
+        content: bytes,
+        text: str,
+    ) -> str:
+        if not sitemap_url.lower().endswith(".gz"):
+            return text
+
+        decompressed = gzip.decompress(
+            content,
+        )
+
+        return decompressed.decode(
+            "utf-8",
+            errors="replace",
+        )
+    
+
 
     def _local_name(
         self,

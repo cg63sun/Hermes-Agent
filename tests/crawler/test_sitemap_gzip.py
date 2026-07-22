@@ -1,3 +1,4 @@
+import gzip
 from typing import Any
 
 import httpx
@@ -8,16 +9,18 @@ from hermes_agent.crawler.sitemap import SitemapLoader
 class MockResponse:
     def __init__(
         self,
+        *,
         text: str = "",
         content: bytes = b"",
         status_code: int = 200,
     ) -> None:
         self.text = text
-        self.content = (
-            content
-            if content
-            else text.encode("utf-8")
-        )
+
+        if content:
+            self.content = content
+        else:
+            self.content = text.encode("utf-8")
+
         self.status_code = status_code
 
     def raise_for_status(self) -> None:
@@ -34,27 +37,34 @@ class MockResponse:
             )
 
 
-def test_sitemap_loader_uses_default_sitemap(
+def test_load_url_reads_gzip_sitemap(
     monkeypatch: Any,
 ) -> None:
-    requested_urls: list[str] = []
-
-    sitemap_xml = """
+    xml_content = """
     <urlset>
         <url>
             <loc>https://example.com/about</loc>
         </url>
+        <url>
+            <loc>https://example.com/contact</loc>
+        </url>
     </urlset>
     """
+
+    compressed_content = gzip.compress(
+        xml_content.encode("utf-8"),
+    )
 
     def mock_get(
         url: str,
         **kwargs: Any,
     ) -> MockResponse:
-        requested_urls.append(url)
+        assert url == (
+            "https://example.com/sitemap.xml.gz"
+        )
 
         return MockResponse(
-            sitemap_xml,
+            content=compressed_content,
         )
 
     monkeypatch.setattr(
@@ -65,83 +75,43 @@ def test_sitemap_loader_uses_default_sitemap(
 
     loader = SitemapLoader()
 
-    urls = loader.load(
-        "https://example.com",
+    urls = loader.load_url(
+        "https://example.com/sitemap.xml.gz",
     )
 
     assert urls == [
         "https://example.com/about",
-    ]
-
-    assert requested_urls == [
-        "https://example.com/sitemap.xml",
+        "https://example.com/contact",
     ]
 
 
-def test_sitemap_loader_falls_back_to_wordpress_sitemap(
+def test_load_falls_back_to_gzip_sitemap(
     monkeypatch: Any,
 ) -> None:
     requested_urls: list[str] = []
 
-    wordpress_sitemap_xml = """
+    xml_content = """
     <urlset>
-        <url>
-            <loc>https://example.com/</loc>
-        </url>
         <url>
             <loc>https://example.com/service</loc>
         </url>
     </urlset>
     """
 
+    compressed_content = gzip.compress(
+        xml_content.encode("utf-8"),
+    )
+
     def mock_get(
         url: str,
         **kwargs: Any,
     ) -> MockResponse:
         requested_urls.append(url)
 
-        if url.endswith("/sitemap.xml"):
+        if url.endswith("sitemap.xml.gz"):
             return MockResponse(
-                status_code=404,
+                content=compressed_content,
             )
-
-        return MockResponse(
-            wordpress_sitemap_xml,
-        )
-
-    monkeypatch.setattr(
-        httpx,
-        "get",
-        mock_get,
-    )
-
-    loader = SitemapLoader()
-
-    urls = loader.load(
-        "https://example.com",
-    )
-
-    assert urls == [
-        "https://example.com/",
-        "https://example.com/service",
-    ]
-
-    assert requested_urls == [
-        "https://example.com/sitemap.xml",
-        "https://example.com/wp-sitemap.xml",
-    ]
-
-
-def test_sitemap_loader_returns_empty_when_all_fail(
-    monkeypatch: Any,
-) -> None:
-    requested_urls: list[str] = []
-
-    def mock_get(
-        url: str,
-        **kwargs: Any,
-    ) -> MockResponse:
-        requested_urls.append(url)
 
         return MockResponse(
             status_code=404,
@@ -159,7 +129,9 @@ def test_sitemap_loader_returns_empty_when_all_fail(
         "https://example.com",
     )
 
-    assert urls == []
+    assert urls == [
+        "https://example.com/service",
+    ]
 
     assert requested_urls == [
         "https://example.com/sitemap.xml",
@@ -168,32 +140,49 @@ def test_sitemap_loader_returns_empty_when_all_fail(
     ]
 
 
-def test_sitemap_loader_falls_back_when_default_is_empty(
+def test_gzip_sitemap_index_loads_children(
     monkeypatch: Any,
 ) -> None:
-    requested_urls: list[str] = []
+    index_xml = """
+    <sitemapindex>
+        <sitemap>
+            <loc>
+                https://example.com/pages.xml.gz
+            </loc>
+        </sitemap>
+    </sitemapindex>
+    """
 
-    wordpress_sitemap_xml = """
+    pages_xml = """
     <urlset>
         <url>
-            <loc>https://example.com/contact</loc>
+            <loc>https://example.com/page-one</loc>
+        </url>
+        <url>
+            <loc>https://example.com/page-two</loc>
         </url>
     </urlset>
     """
+
+    responses = {
+        "https://example.com/sitemap.xml.gz": (
+            gzip.compress(
+                index_xml.encode("utf-8"),
+            )
+        ),
+        "https://example.com/pages.xml.gz": (
+            gzip.compress(
+                pages_xml.encode("utf-8"),
+            )
+        ),
+    }
 
     def mock_get(
         url: str,
         **kwargs: Any,
     ) -> MockResponse:
-        requested_urls.append(url)
-
-        if url.endswith("/sitemap.xml"):
-            return MockResponse(
-                "<urlset></urlset>",
-            )
-
         return MockResponse(
-            wordpress_sitemap_xml,
+            content=responses[url],
         )
 
     monkeypatch.setattr(
@@ -204,15 +193,11 @@ def test_sitemap_loader_falls_back_when_default_is_empty(
 
     loader = SitemapLoader()
 
-    urls = loader.load(
-        "https://example.com",
+    urls = loader.load_url(
+        "https://example.com/sitemap.xml.gz",
     )
 
     assert urls == [
-        "https://example.com/contact",
-    ]
-
-    assert requested_urls == [
-        "https://example.com/sitemap.xml",
-        "https://example.com/wp-sitemap.xml",
+        "https://example.com/page-one",
+        "https://example.com/page-two",
     ]

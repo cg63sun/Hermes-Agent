@@ -5,6 +5,10 @@ from .robots import RobotsChecker
 from .sitemap import SitemapLoader
 from .url_filter import URLFilter
 from .url_normalizer import URLNormalizer
+from hermes_agent.crawler.auto_crawler import (
+    AutoCrawler,
+    AutoCrawlResult,
+)
 
 __all__ = [
     "CrawlManager",
@@ -14,4 +18,6 @@ __all__ = [
     "URLFilter",
     "URLNormalizer",
     "WebCrawler",
+    "AutoCrawler",
+    "AutoCrawlResult",
 ]

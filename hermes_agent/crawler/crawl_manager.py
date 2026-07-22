@@ -1,21 +1,17 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import Any
-from urllib.parse import (
-    urldefrag,
-    urljoin,
-    urlparse,
-    urlunparse,
-)
+from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup
 
+from hermes_agent.crawler.crawl_report import CrawlReport
 from hermes_agent.crawler.crawler import WebCrawler
 from hermes_agent.crawler.robots import RobotsChecker
 from hermes_agent.crawler.sitemap import SitemapLoader
 from hermes_agent.crawler.url_filter import URLFilter
-from hermes_agent.crawler.crawl_report import CrawlReport
+from hermes_agent.crawler.url_normalizer import URLNormalizer
+
 
 class CrawlManager:
     def __init__(
@@ -24,185 +20,346 @@ class CrawlManager:
         robots_checker: RobotsChecker | None = None,
         sitemap_loader: SitemapLoader | None = None,
         url_filter: URLFilter | None = None,
+        url_normalizer: URLNormalizer | None = None,
     ) -> None:
         self._crawler = crawler
         self._robots_checker = robots_checker
         self._sitemap_loader = sitemap_loader
         self._url_filter = url_filter
 
+        self._url_normalizer = (
+            url_normalizer
+            if url_normalizer is not None
+            else URLNormalizer()
+        )
+
+        self._root_url = ""
+        self._root_host = ""
+
     def crawl(
         self,
         start_url: str,
         max_pages: int = 50,
         max_depth: int = 2,
-    ) -> list[Any]:
-        if max_pages <= 0:
-            return []
-
-        if max_depth < 0:
-            return []
-
-        normalized_start_url = self._normalize_url(start_url)
-
-        if not normalized_start_url:
-            return []
-
-        if not self._is_url_allowed(normalized_start_url):
-            return []
-
-        base_url = self._base_url(normalized_start_url)
-        start_host = urlparse(normalized_start_url).netloc.lower()
-
-        self._load_robots(base_url)
-
-        queue: deque[tuple[str, int]] = deque(
-            [(normalized_start_url, 0)],
+    ) -> list:
+        report = self.crawl_with_report(
+            start_url=start_url,
+            max_pages=max_pages,
+            max_depth=max_depth,
         )
 
-        queued_urls: set[str] = {
-            normalized_start_url,
-        }
+        return report.pages
 
-        visited_urls: set[str] = set()
-        pages: list[Any] = []
+    def crawl_with_report(
+        self,
+        start_url: str,
+        max_pages: int = 50,
+        max_depth: int = 2,
+    ) -> CrawlReport:
+        if max_pages <= 0:
+            return CrawlReport(
+                pages=[],
+                visited_urls=[],
+                failed_urls=[],
+                blocked_urls=[],
+            )
+
+        if max_depth < 0:
+            raise ValueError(
+                "max_depth는 0 이상이어야 합니다.",
+            )
+
+        normalized_start_url = self._normalize_start_url(
+            start_url,
+        )
+
+        if not normalized_start_url:
+            return CrawlReport(
+                pages=[],
+                visited_urls=[],
+                failed_urls=[],
+                blocked_urls=[],
+            )
+
+        self._root_url = normalized_start_url
+        self._root_host = self._hostname(
+            normalized_start_url,
+        )
+
+        pages: list = []
+        visited_urls: list[str] = []
+        failed_urls: list[str] = []
+        blocked_urls: list[str] = []
+
+        visited: set[str] = set()
+        queued: set[str] = set()
+
+        queue: deque[tuple[str, int]] = deque()
+
+        robots_loaded = self._load_robots(
+            normalized_start_url,
+        )
+
+        self._enqueue_url(
+            queue=queue,
+            queued=queued,
+            url=normalized_start_url,
+            depth=0,
+        )
 
         self._add_sitemap_urls(
             queue=queue,
-            queued_urls=queued_urls,
-            base_url=base_url,
-            start_host=start_host,
-            max_pages=max_pages,
+            queued=queued,
+            visited=visited,
+            blocked_urls=blocked_urls,
+            start_url=normalized_start_url,
+            robots_loaded=robots_loaded,
         )
 
         while queue and len(pages) < max_pages:
-            current_url, depth = queue.popleft()
+            current_url, current_depth = queue.popleft()
 
-            if current_url in visited_urls:
+            queued.discard(
+                current_url,
+            )
+
+            normalized_url = self._normalize_start_url(
+                current_url,
+            )
+
+            if not normalized_url:
                 continue
 
-            visited_urls.add(current_url)
-
-            if not self._is_url_allowed(current_url):
+            if normalized_url in visited:
                 continue
 
-            if not self._can_fetch(current_url):
+            visited.add(
+                normalized_url,
+            )
+
+            visited_urls.append(
+                normalized_url,
+            )
+
+            if not self._is_internal_url(
+                normalized_url,
+            ):
+                blocked_urls.append(
+                    normalized_url,
+                )
+                continue
+
+            if not self._is_url_allowed(
+                normalized_url,
+            ):
+                blocked_urls.append(
+                    normalized_url,
+                )
+                continue
+
+            if not self._can_fetch(
+                normalized_url,
+                robots_loaded=robots_loaded,
+            ):
+                blocked_urls.append(
+                    normalized_url,
+                )
                 continue
 
             try:
-                page = self._crawler.fetch(current_url)
+                page = self._crawler.fetch(
+                    normalized_url,
+                )
             except Exception:
+                failed_urls.append(
+                    normalized_url,
+                )
                 continue
 
-            pages.append(page)
+            pages.append(
+                page,
+            )
 
-            if depth >= max_depth:
+            if current_depth >= max_depth:
                 continue
 
-            html = getattr(page, "html", "")
+            page_html = getattr(
+                page,
+                "html",
+                "",
+            )
+
+            page_url = getattr(
+                page,
+                "url",
+                normalized_url,
+            )
 
             links = self._extract_links(
-                html=html,
-                base_url=current_url,
+                html=page_html,
+                current_url=page_url,
             )
 
             for link in links:
-                if len(pages) + len(queue) >= max_pages:
-                    break
+                if link in visited:
+                    continue
 
-                if not self._is_internal_url(
+                if link in queued:
+                    continue
+
+                self._enqueue_url(
+                    queue=queue,
+                    queued=queued,
                     url=link,
-                    start_host=start_host,
-                ):
-                    continue
-
-                if link in visited_urls:
-                    continue
-
-                if link in queued_urls:
-                    continue
-
-                if not self._is_url_allowed(link):
-                    continue
-
-                if not self._can_fetch(link):
-                    continue
-
-                queued_urls.add(link)
-                queue.append(
-                    (link, depth + 1),
+                    depth=current_depth + 1,
                 )
 
-        return pages
+        return CrawlReport(
+            pages=pages,
+            visited_urls=self._remove_duplicates(
+                visited_urls,
+            ),
+            failed_urls=self._remove_duplicates(
+                failed_urls,
+            ),
+            blocked_urls=self._remove_duplicates(
+                blocked_urls,
+            ),
+        )
 
     def _load_robots(
         self,
-        base_url: str,
-    ) -> None:
+        start_url: str,
+    ) -> bool:
         if self._robots_checker is None:
-            return
+            return False
+
+        base_url = self._base_url(
+            start_url,
+        )
 
         try:
-            self._robots_checker.load(base_url)
+            self._robots_checker.load(
+                base_url,
+            )
         except Exception:
-            pass
+            return False
+
+        return True
 
     def _add_sitemap_urls(
         self,
+        *,
         queue: deque[tuple[str, int]],
-        queued_urls: set[str],
-        base_url: str,
-        start_host: str,
-        max_pages: int,
+        queued: set[str],
+        visited: set[str],
+        blocked_urls: list[str],
+        start_url: str,
+        robots_loaded: bool,
     ) -> None:
         if self._sitemap_loader is None:
             return
 
         try:
-            sitemap_urls = self._sitemap_loader.load(base_url)
+            sitemap_urls = self._sitemap_loader.load(
+                self._base_url(
+                    start_url,
+                ),
+            )
         except Exception:
             return
 
         for sitemap_url in sitemap_urls:
-            if len(queue) >= max_pages:
-                break
-
-            normalized_url = self._normalize_url(
+            normalized_url = self._normalize_start_url(
                 sitemap_url,
             )
 
             if not normalized_url:
                 continue
 
+            if normalized_url in visited:
+                continue
+
+            if normalized_url in queued:
+                continue
+
             if not self._is_internal_url(
-                url=normalized_url,
-                start_host=start_host,
+                normalized_url,
             ):
+                blocked_urls.append(
+                    normalized_url,
+                )
                 continue
 
-            if normalized_url in queued_urls:
+            if not self._is_url_allowed(
+                normalized_url,
+            ):
+                blocked_urls.append(
+                    normalized_url,
+                )
                 continue
 
-            if not self._is_url_allowed(normalized_url):
+            if not self._can_fetch(
+                normalized_url,
+                robots_loaded=robots_loaded,
+            ):
+                blocked_urls.append(
+                    normalized_url,
+                )
                 continue
 
-            if not self._can_fetch(normalized_url):
-                continue
-
-            queued_urls.add(normalized_url)
-
-            queue.append(
-                (normalized_url, 0),
+            self._enqueue_url(
+                queue=queue,
+                queued=queued,
+                url=normalized_url,
+                depth=0,
             )
+
+    def _enqueue_url(
+        self,
+        *,
+        queue: deque[tuple[str, int]],
+        queued: set[str],
+        url: str,
+        depth: int,
+    ) -> None:
+        normalized_url = self._normalize_start_url(
+            url,
+        )
+
+        if not normalized_url:
+            return
+
+        if normalized_url in queued:
+            return
+
+        queue.append(
+            (
+                normalized_url,
+                depth,
+            ),
+        )
+
+        queued.add(
+            normalized_url,
+        )
 
     def _can_fetch(
         self,
         url: str,
+        *,
+        robots_loaded: bool = True,
     ) -> bool:
         if self._robots_checker is None:
             return True
 
+        if not robots_loaded:
+            return True
+
         try:
-            return self._robots_checker.can_fetch(url)
+            return self._robots_checker.can_fetch(
+                url,
+            )
         except Exception:
             return True
 
@@ -214,14 +371,23 @@ class CrawlManager:
             return True
 
         try:
-            return self._url_filter.is_allowed(url)
+            return self._url_filter.is_allowed(
+                url,
+            )
+        except AttributeError:
+            try:
+                return self._url_filter.allow(
+                    url,
+                )
+            except AttributeError:
+                return True
         except Exception:
-            return True
+            return False
 
     def _extract_links(
         self,
         html: str,
-        base_url: str,
+        current_url: str,
     ) -> list[str]:
         if not html:
             return []
@@ -237,209 +403,152 @@ class CrawlManager:
             "a",
             href=True,
         ):
-            href = str(
-                anchor.get("href", ""),
-            ).strip()
+            href = anchor.get(
+                "href",
+            )
+
+            if not isinstance(
+                href,
+                str,
+            ):
+                continue
+
+            href = href.strip()
 
             if not href:
                 continue
 
-            lowered_href = href.lower()
-
-            if lowered_href.startswith(
-                (
-                    "#",
-                    "mailto:",
-                    "tel:",
-                    "javascript:",
-                    "data:",
-                ),
+            if self._is_unsupported_link(
+                href,
             ):
                 continue
 
-            absolute_url = urljoin(
-                base_url,
-                href,
-            )
-
             normalized_url = self._normalize_url(
-                absolute_url,
+                href,
+                base_url=current_url,
             )
 
-            if normalized_url:
-                links.append(normalized_url)
+            if not normalized_url:
+                continue
 
-        return links
+            if not self._is_internal_url(
+                normalized_url,
+            ):
+                continue
+
+            # 여기에서는 URLFilter 검사를 하지 않습니다.
+            # 큐에 넣은 뒤 crawl_with_report()에서 검사해야
+            # blocked_urls 보고서에 기록할 수 있습니다.
+
+            links.append(
+                normalized_url,
+            )
+
+        return self._remove_duplicates(
+            links,
+        )
+
+    def _normalize_start_url(
+        self,
+        url: str,
+    ) -> str:
+        stripped_url = url.strip()
+
+        if not stripped_url:
+            return ""
+
+        parsed = urlsplit(
+            stripped_url,
+        )
+
+        # http 또는 https 절대 URL인 경우에만 정규화합니다.
+        if (
+            parsed.scheme.lower() in {"http", "https"}
+            and parsed.netloc
+        ):
+            return self._url_normalizer.normalize(
+                stripped_url,
+            )
+
+        # 기존 테스트 호환을 위해 상대형 시작 URL은
+        # 원래 문자열 그대로 유지합니다.
+        return stripped_url
 
     def _normalize_url(
         self,
         url: str,
+        base_url: str | None = None,
     ) -> str:
-        if not url:
-            return ""
-
-        url_without_fragment, _ = urldefrag(
-            url.strip(),
+        return self._url_normalizer.normalize(
+            url,
+            base_url=base_url,
         )
-
-        parsed = urlparse(
-            url_without_fragment,
-        )
-
-        scheme = parsed.scheme.lower()
-        netloc = parsed.netloc.lower()
-
-        if scheme not in {"http", "https"}:
-            return ""
-
-        if not netloc:
-            return ""
-
-        path = parsed.path or "/"
-
-        if path != "/":
-            path = path.rstrip("/")
-
-        normalized = parsed._replace(
-            scheme=scheme,
-            netloc=netloc,
-            path=path,
-            fragment="",
-        )
-
-        return urlunparse(normalized)
 
     def _is_internal_url(
         self,
         url: str,
-        start_host: str,
     ) -> bool:
-        return (
-            urlparse(url).netloc.lower()
-            == start_host
+        if not self._root_host:
+            return True
+
+        url_host = self._hostname(
+            url,
         )
+
+        if not url_host:
+            return True
+
+        return url_host == self._root_host
+
+    def _hostname(
+        self,
+        url: str,
+    ) -> str:
+        parsed = urlsplit(
+            url,
+        )
+
+        return (
+            parsed.hostname or ""
+        ).lower()
 
     def _base_url(
         self,
         url: str,
     ) -> str:
-        parsed = urlparse(url)
+        parsed = urlsplit(
+            url,
+        )
+
+        if not parsed.scheme or not parsed.netloc:
+            return url.rstrip("/")
 
         return (
             f"{parsed.scheme}://"
             f"{parsed.netloc}"
         )
-    
-    def crawl_with_report(
+
+    def _is_unsupported_link(
         self,
-        start_url: str,
-        max_pages: int = 50,
-        max_depth: int = 2,
-    ) -> CrawlReport:
-        if max_pages <= 0 or max_depth < 0:
-            return CrawlReport()
+        href: str,
+    ) -> bool:
+        lowered_href = href.lower()
 
-        normalized_start_url = self._normalize_url(start_url)
-
-        if not normalized_start_url:
-            return CrawlReport(
-                failed_urls=[start_url],
-            )
-
-        if not self._is_url_allowed(normalized_start_url):
-            return CrawlReport(
-                blocked_urls=[normalized_start_url],
-            )
-
-        base_url = self._base_url(normalized_start_url)
-        start_host = urlparse(normalized_start_url).netloc.lower()
-
-        self._load_robots(base_url)
-
-        queue: deque[tuple[str, int]] = deque(
-            [(normalized_start_url, 0)],
+        unsupported_prefixes = (
+            "mailto:",
+            "tel:",
+            "javascript:",
+            "data:",
         )
 
-        queued_urls: set[str] = {
-            normalized_start_url,
-        }
-
-        visited_urls: list[str] = []
-        visited_set: set[str] = set()
-        failed_urls: list[str] = []
-        blocked_urls: list[str] = []
-        pages: list[Any] = []
-
-        self._add_sitemap_urls(
-            queue=queue,
-            queued_urls=queued_urls,
-            base_url=base_url,
-            start_host=start_host,
-            max_pages=max_pages,
+        return lowered_href.startswith(
+            unsupported_prefixes,
         )
 
-        while queue and len(pages) < max_pages:
-            current_url, depth = queue.popleft()
-
-            if current_url in visited_set:
-                continue
-
-            visited_set.add(current_url)
-            visited_urls.append(current_url)
-
-            if not self._is_url_allowed(current_url):
-                blocked_urls.append(current_url)
-                continue
-
-            if not self._can_fetch(current_url):
-                blocked_urls.append(current_url)
-                continue
-
-            try:
-                page = self._crawler.fetch(current_url)
-            except Exception:
-                failed_urls.append(current_url)
-                continue
-
-            pages.append(page)
-
-            if depth >= max_depth:
-                continue
-
-            html = getattr(page, "html", "")
-
-            for link in self._extract_links(
-                html=html,
-                base_url=current_url,
-            ):
-                if len(pages) + len(queue) >= max_pages:
-                    break
-
-                if not self._is_internal_url(
-                    url=link,
-                    start_host=start_host,
-                ):
-                    continue
-
-                if link in visited_set or link in queued_urls:
-                    continue
-
-                if not self._is_url_allowed(link):
-                    blocked_urls.append(link)
-                    continue
-
-                if not self._can_fetch(link):
-                    blocked_urls.append(link)
-                    continue
-
-                queued_urls.add(link)
-                queue.append(
-                    (link, depth + 1),
-                )
-
-        return CrawlReport(
-            pages=pages,
-            visited_urls=visited_urls,
-            failed_urls=failed_urls,
-            blocked_urls=list(dict.fromkeys(blocked_urls)),
+    def _remove_duplicates(
+        self,
+        values: list[str],
+    ) -> list[str]:
+        return list(
+            dict.fromkeys(values),
         )
