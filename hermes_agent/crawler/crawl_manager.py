@@ -15,7 +15,7 @@ from hermes_agent.crawler.crawler import WebCrawler
 from hermes_agent.crawler.robots import RobotsChecker
 from hermes_agent.crawler.sitemap import SitemapLoader
 from hermes_agent.crawler.url_filter import URLFilter
-
+from hermes_agent.crawler.crawl_report import CrawlReport
 
 class CrawlManager:
     def __init__(
@@ -328,4 +328,118 @@ class CrawlManager:
         return (
             f"{parsed.scheme}://"
             f"{parsed.netloc}"
+        )
+    
+    def crawl_with_report(
+        self,
+        start_url: str,
+        max_pages: int = 50,
+        max_depth: int = 2,
+    ) -> CrawlReport:
+        if max_pages <= 0 or max_depth < 0:
+            return CrawlReport()
+
+        normalized_start_url = self._normalize_url(start_url)
+
+        if not normalized_start_url:
+            return CrawlReport(
+                failed_urls=[start_url],
+            )
+
+        if not self._is_url_allowed(normalized_start_url):
+            return CrawlReport(
+                blocked_urls=[normalized_start_url],
+            )
+
+        base_url = self._base_url(normalized_start_url)
+        start_host = urlparse(normalized_start_url).netloc.lower()
+
+        self._load_robots(base_url)
+
+        queue: deque[tuple[str, int]] = deque(
+            [(normalized_start_url, 0)],
+        )
+
+        queued_urls: set[str] = {
+            normalized_start_url,
+        }
+
+        visited_urls: list[str] = []
+        visited_set: set[str] = set()
+        failed_urls: list[str] = []
+        blocked_urls: list[str] = []
+        pages: list[Any] = []
+
+        self._add_sitemap_urls(
+            queue=queue,
+            queued_urls=queued_urls,
+            base_url=base_url,
+            start_host=start_host,
+            max_pages=max_pages,
+        )
+
+        while queue and len(pages) < max_pages:
+            current_url, depth = queue.popleft()
+
+            if current_url in visited_set:
+                continue
+
+            visited_set.add(current_url)
+            visited_urls.append(current_url)
+
+            if not self._is_url_allowed(current_url):
+                blocked_urls.append(current_url)
+                continue
+
+            if not self._can_fetch(current_url):
+                blocked_urls.append(current_url)
+                continue
+
+            try:
+                page = self._crawler.fetch(current_url)
+            except Exception:
+                failed_urls.append(current_url)
+                continue
+
+            pages.append(page)
+
+            if depth >= max_depth:
+                continue
+
+            html = getattr(page, "html", "")
+
+            for link in self._extract_links(
+                html=html,
+                base_url=current_url,
+            ):
+                if len(pages) + len(queue) >= max_pages:
+                    break
+
+                if not self._is_internal_url(
+                    url=link,
+                    start_host=start_host,
+                ):
+                    continue
+
+                if link in visited_set or link in queued_urls:
+                    continue
+
+                if not self._is_url_allowed(link):
+                    blocked_urls.append(link)
+                    continue
+
+                if not self._can_fetch(link):
+                    blocked_urls.append(link)
+                    continue
+
+                queued_urls.add(link)
+                queue.append(
+                    (link, depth + 1),
+                )
+
+        return CrawlReport(
+            pages=pages,
+            visited_urls=visited_urls,
+            failed_urls=failed_urls,
+            blocked_urls=list(dict.fromkeys(blocked_urls)),
         )
