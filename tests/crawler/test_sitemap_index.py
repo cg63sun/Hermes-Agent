@@ -345,8 +345,8 @@ def test_sitemap_loader_prevents_recursive_loop(
 
     loader = SitemapLoader()
 
-    urls = loader.load(
-        "https://example.com",
+    urls = loader.load_url(
+        "https://example.com/sitemap.xml",
     )
 
     assert urls == []

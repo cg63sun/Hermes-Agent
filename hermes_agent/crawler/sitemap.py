@@ -7,6 +7,11 @@ import httpx
 
 
 class SitemapLoader:
+    DEFAULT_SITEMAP_PATHS = (
+        "sitemap.xml",
+        "wp-sitemap.xml",
+    )
+
     def __init__(
         self,
         timeout: float = 20.0,
@@ -19,12 +24,25 @@ class SitemapLoader:
         self,
         base_url: str,
     ) -> list[str]:
-        sitemap_url = urljoin(
-            base_url.rstrip("/") + "/",
-            "sitemap.xml",
+        base_url_with_slash = (
+            base_url.rstrip("/") + "/"
         )
 
-        return self.load_url(sitemap_url)
+        for sitemap_path in self.DEFAULT_SITEMAP_PATHS:
+            sitemap_url = urljoin(
+                base_url_with_slash,
+                sitemap_path,
+            )
+
+            try:
+                urls = self.load_url(sitemap_url)
+            except Exception:
+                continue
+
+            if urls:
+                return urls
+
+        return []
 
     def load_url(
         self,
@@ -41,7 +59,7 @@ class SitemapLoader:
         self,
         xml_content: str,
     ) -> list[str]:
-        sitemap_type, urls = self.parse_document(
+        _, urls = self.parse_document(
             xml_content,
         )
 
@@ -54,14 +72,20 @@ class SitemapLoader:
         if not xml_content.strip():
             return "empty", []
 
-        root = ElementTree.fromstring(xml_content)
+        root = ElementTree.fromstring(
+            xml_content,
+        )
 
-        root_name = self._local_name(root.tag)
+        root_name = self._local_name(
+            root.tag,
+        )
 
         urls: list[str] = []
 
         for element in root.iter():
-            if self._local_name(element.tag) != "loc":
+            if self._local_name(
+                element.tag,
+            ) != "loc":
                 continue
 
             if not element.text:
@@ -91,7 +115,9 @@ class SitemapLoader:
         if len(visited_sitemaps) >= self._max_sitemaps:
             return []
 
-        visited_sitemaps.add(sitemap_url)
+        visited_sitemaps.add(
+            sitemap_url,
+        )
 
         response = httpx.get(
             sitemap_url,
@@ -106,7 +132,7 @@ class SitemapLoader:
         )
 
         if sitemap_type != "index":
-            return urls
+            return self._remove_duplicates(urls)
 
         page_urls: list[str] = []
 
@@ -122,16 +148,23 @@ class SitemapLoader:
             except Exception:
                 continue
 
-            page_urls.extend(child_urls)
+            page_urls.extend(
+                child_urls,
+            )
 
-        return self._remove_duplicates(page_urls)
+        return self._remove_duplicates(
+            page_urls,
+        )
 
     def _local_name(
         self,
         tag: str,
     ) -> str:
         if "}" in tag:
-            return tag.rsplit("}", 1)[1]
+            return tag.rsplit(
+                "}",
+                1,
+            )[1]
 
         return tag
 
@@ -139,4 +172,6 @@ class SitemapLoader:
         self,
         urls: list[str],
     ) -> list[str]:
-        return list(dict.fromkeys(urls))
+        return list(
+            dict.fromkeys(urls),
+        )
