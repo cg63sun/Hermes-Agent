@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 from hermes_agent.crawler.crawler import WebCrawler
 from hermes_agent.crawler.robots import RobotsChecker
+from hermes_agent.crawler.sitemap import SitemapLoader
 
 
 class CrawlManager:
@@ -20,9 +21,11 @@ class CrawlManager:
         self,
         crawler: WebCrawler,
         robots_checker: RobotsChecker | None = None,
+        sitemap_loader: SitemapLoader | None = None,
     ) -> None:
         self._crawler = crawler
         self._robots_checker = robots_checker
+        self._sitemap_loader = sitemap_loader
 
     def crawl(
         self,
@@ -41,15 +44,10 @@ class CrawlManager:
         if not normalized_start_url:
             return []
 
+        base_url = self._base_url(normalized_start_url)
         start_host = urlparse(normalized_start_url).netloc.lower()
 
-        if self._robots_checker is not None:
-            try:
-                self._robots_checker.load(
-                    self._base_url(normalized_start_url),
-                )
-            except Exception:
-                pass
+        self._load_robots(base_url)
 
         queue: deque[tuple[str, int]] = deque(
             [(normalized_start_url, 0)],
@@ -59,6 +57,14 @@ class CrawlManager:
         visited_urls: set[str] = set()
         pages: list[Any] = []
 
+        self._add_sitemap_urls(
+            queue=queue,
+            queued_urls=queued_urls,
+            base_url=base_url,
+            start_host=start_host,
+            max_pages=max_pages,
+        )
+
         while queue and len(pages) < max_pages:
             current_url, depth = queue.popleft()
 
@@ -67,10 +73,7 @@ class CrawlManager:
 
             visited_urls.add(current_url)
 
-            if (
-                self._robots_checker is not None
-                and not self._robots_checker.can_fetch(current_url)
-            ):
+            if not self._can_fetch(current_url):
                 continue
 
             try:
@@ -101,16 +104,73 @@ class CrawlManager:
                 if link in visited_urls or link in queued_urls:
                     continue
 
-                if (
-                    self._robots_checker is not None
-                    and not self._robots_checker.can_fetch(link)
-                ):
+                if not self._can_fetch(link):
                     continue
 
                 queued_urls.add(link)
                 queue.append((link, depth + 1))
 
         return pages
+
+    def _load_robots(self, base_url: str) -> None:
+        if self._robots_checker is None:
+            return
+
+        try:
+            self._robots_checker.load(base_url)
+        except Exception:
+            pass
+
+    def _add_sitemap_urls(
+        self,
+        queue: deque[tuple[str, int]],
+        queued_urls: set[str],
+        base_url: str,
+        start_host: str,
+        max_pages: int,
+    ) -> None:
+        if self._sitemap_loader is None:
+            return
+
+        try:
+            sitemap_urls = self._sitemap_loader.load(base_url)
+        except Exception:
+            return
+
+        for sitemap_url in sitemap_urls:
+            if len(queue) >= max_pages:
+                break
+
+            normalized_url = self._normalize_url(sitemap_url)
+
+            if not normalized_url:
+                continue
+
+            if not self._is_internal_url(
+                url=normalized_url,
+                start_host=start_host,
+            ):
+                continue
+
+            if normalized_url in queued_urls:
+                continue
+
+            if not self._can_fetch(normalized_url):
+                continue
+
+            queued_urls.add(normalized_url)
+
+            # sitemap에 있는 URL은 시작 페이지와 같은 우선순위로 처리합니다.
+            queue.append((normalized_url, 0))
+
+    def _can_fetch(self, url: str) -> bool:
+        if self._robots_checker is None:
+            return True
+
+        try:
+            return self._robots_checker.can_fetch(url)
+        except Exception:
+            return True
 
     def _extract_links(
         self,
