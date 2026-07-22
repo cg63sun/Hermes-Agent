@@ -14,6 +14,7 @@ dependencies = [
 [project.scripts]
 hermes-crawl = "hermes_agent.cli.crawl:main"
 hermes-research = "hermes_agent.cli.research:main"
+hermes-site-plan = "hermes_agent.cli.site_plan:main"
 
 [build-system]
 requires = ["hatchling"]
