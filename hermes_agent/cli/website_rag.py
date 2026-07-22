@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import sys
+
+import httpx
 
 from hermes_agent.embeddings import OllamaEmbeddingModel
 from hermes_agent.generators import OllamaGenerator
@@ -84,21 +87,49 @@ def run(
     )
 
 
-def main() -> None:
+def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    result = run(
-        url=args.url,
-        question=args.question,
-        generator_model=args.generator_model,
-        embedding_model=args.embedding_model,
-        chunk_size=args.chunk_size,
-        top_k=args.top_k,
-    )
+    try:
+        result = run(
+            url=args.url,
+            question=args.question,
+            generator_model=args.generator_model,
+            embedding_model=args.embedding_model,
+            chunk_size=args.chunk_size,
+            top_k=args.top_k,
+        )
+    except httpx.ConnectError:
+        print(
+            "오류: 웹사이트 또는 Ollama 서버에 연결할 수 없습니다.",
+            file=sys.stderr,
+        )
+        return 1
+    except httpx.HTTPStatusError as exc:
+        print(
+            f"오류: HTTP 요청에 실패했습니다. "
+            f"상태 코드: {exc.response.status_code}",
+            file=sys.stderr,
+        )
+        return 1
+    except KeyError as exc:
+        print(
+            f"오류: 응답 데이터에 필요한 값이 없습니다: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+    except Exception as exc:
+        print(
+            f"오류: {exc}",
+            file=sys.stderr,
+        )
+        return 1
 
     print(result)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
