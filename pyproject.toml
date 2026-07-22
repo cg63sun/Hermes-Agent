@@ -11,6 +11,9 @@ dependencies = [
     "playwright>=1.61.0",
 ]
 
+[project.scripts]
+hermes-crawl = "hermes_agent.cli.crawl:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
