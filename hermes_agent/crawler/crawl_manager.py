@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from hermes_agent.crawler.crawler import WebCrawler
 from hermes_agent.crawler.robots import RobotsChecker
 from hermes_agent.crawler.sitemap import SitemapLoader
+from hermes_agent.crawler.url_filter import URLFilter
 
 
 class CrawlManager:
@@ -22,10 +23,12 @@ class CrawlManager:
         crawler: WebCrawler,
         robots_checker: RobotsChecker | None = None,
         sitemap_loader: SitemapLoader | None = None,
+        url_filter: URLFilter | None = None,
     ) -> None:
         self._crawler = crawler
         self._robots_checker = robots_checker
         self._sitemap_loader = sitemap_loader
+        self._url_filter = url_filter
 
     def crawl(
         self,
@@ -44,6 +47,9 @@ class CrawlManager:
         if not normalized_start_url:
             return []
 
+        if not self._is_url_allowed(normalized_start_url):
+            return []
+
         base_url = self._base_url(normalized_start_url)
         start_host = urlparse(normalized_start_url).netloc.lower()
 
@@ -53,7 +59,10 @@ class CrawlManager:
             [(normalized_start_url, 0)],
         )
 
-        queued_urls = {normalized_start_url}
+        queued_urls: set[str] = {
+            normalized_start_url,
+        }
+
         visited_urls: set[str] = set()
         pages: list[Any] = []
 
@@ -73,6 +82,9 @@ class CrawlManager:
 
             visited_urls.add(current_url)
 
+            if not self._is_url_allowed(current_url):
+                continue
+
             if not self._can_fetch(current_url):
                 continue
 
@@ -88,10 +100,12 @@ class CrawlManager:
 
             html = getattr(page, "html", "")
 
-            for link in self._extract_links(
+            links = self._extract_links(
                 html=html,
                 base_url=current_url,
-            ):
+            )
+
+            for link in links:
                 if len(pages) + len(queue) >= max_pages:
                     break
 
@@ -101,18 +115,29 @@ class CrawlManager:
                 ):
                     continue
 
-                if link in visited_urls or link in queued_urls:
+                if link in visited_urls:
+                    continue
+
+                if link in queued_urls:
+                    continue
+
+                if not self._is_url_allowed(link):
                     continue
 
                 if not self._can_fetch(link):
                     continue
 
                 queued_urls.add(link)
-                queue.append((link, depth + 1))
+                queue.append(
+                    (link, depth + 1),
+                )
 
         return pages
 
-    def _load_robots(self, base_url: str) -> None:
+    def _load_robots(
+        self,
+        base_url: str,
+    ) -> None:
         if self._robots_checker is None:
             return
 
@@ -141,7 +166,9 @@ class CrawlManager:
             if len(queue) >= max_pages:
                 break
 
-            normalized_url = self._normalize_url(sitemap_url)
+            normalized_url = self._normalize_url(
+                sitemap_url,
+            )
 
             if not normalized_url:
                 continue
@@ -155,20 +182,39 @@ class CrawlManager:
             if normalized_url in queued_urls:
                 continue
 
+            if not self._is_url_allowed(normalized_url):
+                continue
+
             if not self._can_fetch(normalized_url):
                 continue
 
             queued_urls.add(normalized_url)
 
-            # sitemap에 있는 URL은 시작 페이지와 같은 우선순위로 처리합니다.
-            queue.append((normalized_url, 0))
+            queue.append(
+                (normalized_url, 0),
+            )
 
-    def _can_fetch(self, url: str) -> bool:
+    def _can_fetch(
+        self,
+        url: str,
+    ) -> bool:
         if self._robots_checker is None:
             return True
 
         try:
             return self._robots_checker.can_fetch(url)
+        except Exception:
+            return True
+
+    def _is_url_allowed(
+        self,
+        url: str,
+    ) -> bool:
+        if self._url_filter is None:
+            return True
+
+        try:
+            return self._url_filter.is_allowed(url)
         except Exception:
             return True
 
@@ -180,16 +226,27 @@ class CrawlManager:
         if not html:
             return []
 
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(
+            html,
+            "html.parser",
+        )
+
         links: list[str] = []
 
-        for anchor in soup.find_all("a", href=True):
-            href = str(anchor.get("href", "")).strip()
+        for anchor in soup.find_all(
+            "a",
+            href=True,
+        ):
+            href = str(
+                anchor.get("href", ""),
+            ).strip()
 
             if not href:
                 continue
 
-            if href.startswith(
+            lowered_href = href.lower()
+
+            if lowered_href.startswith(
                 (
                     "#",
                     "mailto:",
@@ -200,23 +257,42 @@ class CrawlManager:
             ):
                 continue
 
-            absolute_url = urljoin(base_url, href)
-            normalized_url = self._normalize_url(absolute_url)
+            absolute_url = urljoin(
+                base_url,
+                href,
+            )
+
+            normalized_url = self._normalize_url(
+                absolute_url,
+            )
 
             if normalized_url:
                 links.append(normalized_url)
 
         return links
 
-    def _normalize_url(self, url: str) -> str:
-        url_without_fragment, _ = urldefrag(url.strip())
-
-        parsed = urlparse(url_without_fragment)
-
-        if parsed.scheme.lower() not in {"http", "https"}:
+    def _normalize_url(
+        self,
+        url: str,
+    ) -> str:
+        if not url:
             return ""
 
-        if not parsed.netloc:
+        url_without_fragment, _ = urldefrag(
+            url.strip(),
+        )
+
+        parsed = urlparse(
+            url_without_fragment,
+        )
+
+        scheme = parsed.scheme.lower()
+        netloc = parsed.netloc.lower()
+
+        if scheme not in {"http", "https"}:
+            return ""
+
+        if not netloc:
             return ""
 
         path = parsed.path or "/"
@@ -225,8 +301,8 @@ class CrawlManager:
             path = path.rstrip("/")
 
         normalized = parsed._replace(
-            scheme=parsed.scheme.lower(),
-            netloc=parsed.netloc.lower(),
+            scheme=scheme,
+            netloc=netloc,
             path=path,
             fragment="",
         )
@@ -238,9 +314,18 @@ class CrawlManager:
         url: str,
         start_host: str,
     ) -> bool:
-        return urlparse(url).netloc.lower() == start_host
+        return (
+            urlparse(url).netloc.lower()
+            == start_host
+        )
 
-    def _base_url(self, url: str) -> str:
+    def _base_url(
+        self,
+        url: str,
+    ) -> str:
         parsed = urlparse(url)
 
-        return f"{parsed.scheme}://{parsed.netloc}"
+        return (
+            f"{parsed.scheme}://"
+            f"{parsed.netloc}"
+        )
