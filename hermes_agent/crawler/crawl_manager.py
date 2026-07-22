@@ -12,11 +12,17 @@ from urllib.parse import (
 from bs4 import BeautifulSoup
 
 from hermes_agent.crawler.crawler import WebCrawler
+from hermes_agent.crawler.robots import RobotsChecker
 
 
 class CrawlManager:
-    def __init__(self, crawler: WebCrawler) -> None:
+    def __init__(
+        self,
+        crawler: WebCrawler,
+        robots_checker: RobotsChecker | None = None,
+    ) -> None:
         self._crawler = crawler
+        self._robots_checker = robots_checker
 
     def crawl(
         self,
@@ -37,6 +43,14 @@ class CrawlManager:
 
         start_host = urlparse(normalized_start_url).netloc.lower()
 
+        if self._robots_checker is not None:
+            try:
+                self._robots_checker.load(
+                    self._base_url(normalized_start_url),
+                )
+            except Exception:
+                pass
+
         queue: deque[tuple[str, int]] = deque(
             [(normalized_start_url, 0)],
         )
@@ -52,6 +66,12 @@ class CrawlManager:
                 continue
 
             visited_urls.add(current_url)
+
+            if (
+                self._robots_checker is not None
+                and not self._robots_checker.can_fetch(current_url)
+            ):
+                continue
 
             try:
                 page = self._crawler.fetch(current_url)
@@ -79,6 +99,12 @@ class CrawlManager:
                     continue
 
                 if link in visited_urls or link in queued_urls:
+                    continue
+
+                if (
+                    self._robots_checker is not None
+                    and not self._robots_checker.can_fetch(link)
+                ):
                     continue
 
                 queued_urls.add(link)
@@ -153,3 +179,8 @@ class CrawlManager:
         start_host: str,
     ) -> bool:
         return urlparse(url).netloc.lower() == start_host
+
+    def _base_url(self, url: str) -> str:
+        parsed = urlparse(url)
+
+        return f"{parsed.scheme}://{parsed.netloc}"
