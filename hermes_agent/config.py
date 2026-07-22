@@ -1,6 +1,11 @@
-from pathlib import Path
+from dataclasses import dataclass
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-PACKAGE_NAME = "hermes-agent"
-VERSION = "0.1.0"
+@dataclass(frozen=True)
+class WebsiteRAGConfig:
+    generator_model: str = "qwen3:8b"
+    embedding_model: str = "nomic-embed-text"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    chunk_size: int = 500
+    top_k: int = 3
+    timeout: float = 120.0
