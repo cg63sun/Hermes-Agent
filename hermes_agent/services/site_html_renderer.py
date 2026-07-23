@@ -9,6 +9,15 @@ from .site_plan import SitePlan
 class SiteHtmlRenderer:
     """Render a site plan as a complete, standalone HTML document."""
 
+    _STYLE_OPEN = "  <style>\n"
+    _STYLE_CLOSE = "  </style>\n"
+    _EXTERNAL_STYLESHEET = (
+        '  <link rel="stylesheet" href="assets/style.css">\n'
+    )
+    _EXTERNAL_SCRIPT = (
+        '  <script src="assets/script.js" defer></script>\n'
+    )
+
     def render(self, plan: SitePlan) -> str:
         business_name = escape(plan.business_name)
         business_type = escape(plan.business_type)
@@ -399,6 +408,69 @@ class SiteHtmlRenderer:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.render(plan), encoding="utf-8")
         return path
+
+    def save_bundle(
+        self,
+        plan: SitePlan,
+        output_dir: str | Path,
+    ) -> tuple[Path, Path, Path]:
+        """Save a deployable site with separate HTML, CSS, and JavaScript."""
+        directory = Path(output_dir)
+        assets_directory = directory / "assets"
+        assets_directory.mkdir(parents=True, exist_ok=True)
+
+        standalone_html = self.render(plan)
+        css, bundled_html = self._extract_external_css(standalone_html)
+        bundled_html = bundled_html.replace(
+            "</head>\n",
+            f"{self._EXTERNAL_SCRIPT}</head>\n",
+            1,
+        )
+
+        html_path = directory / "index.html"
+        css_path = assets_directory / "style.css"
+        script_path = assets_directory / "script.js"
+
+        html_path.write_text(bundled_html, encoding="utf-8")
+        css_path.write_text(css, encoding="utf-8")
+        script_path.write_text(self.render_script(), encoding="utf-8")
+
+        return html_path, css_path, script_path
+
+    @classmethod
+    def _extract_external_css(cls, html: str) -> tuple[str, str]:
+        style_start = html.index(cls._STYLE_OPEN)
+        css_start = style_start + len(cls._STYLE_OPEN)
+        style_end = html.index(cls._STYLE_CLOSE, css_start)
+
+        css = html[css_start:style_end]
+        css = "\n".join(
+            line[4:] if line.startswith("    ") else line
+            for line in css.splitlines()
+        )
+        if css:
+            css += "\n"
+
+        bundled_html = (
+            html[:style_start]
+            + cls._EXTERNAL_STYLESHEET
+            + html[style_end + len(cls._STYLE_CLOSE) :]
+        )
+        return css, bundled_html
+
+    @staticmethod
+    def render_script() -> str:
+        return """document.querySelectorAll('a[href^="#"]').forEach((link) => {
+  link.addEventListener("click", (event) => {
+    const target = document.querySelector(link.getAttribute("href"));
+
+    if (target) {
+      event.preventDefault();
+      target.scrollIntoView({ behavior: "smooth" });
+    }
+  });
+});
+"""
 
     @staticmethod
     def _render_section(index: int, section: object) -> str:

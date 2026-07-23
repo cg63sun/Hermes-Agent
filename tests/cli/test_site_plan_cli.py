@@ -43,6 +43,8 @@ def test_site_plan_parser_reads_arguments() -> None:
             "output/site-plan.json",
             "--html-output",
             "output/index.html",
+            "--site-output-dir",
+            "output/site",
         ],
     )
 
@@ -55,6 +57,7 @@ def test_site_plan_parser_reads_arguments() -> None:
     assert args.generation_timeout == 300.0
     assert args.json_output == "output/site-plan.json"
     assert args.html_output == "output/index.html"
+    assert args.site_output_dir == "output/site"
 
 
 def test_run_site_plan_saves_markdown_json_and_html(
@@ -105,6 +108,7 @@ def test_run_site_plan_saves_markdown_json_and_html(
     markdown_path = tmp_path / "site-plan.md"
     json_path = tmp_path / "site-plan.json"
     html_path = tmp_path / "index.html"
+    site_output_dir = tmp_path / "site"
 
     result = site_plan_cli.run_site_plan(
         ["https://example.com"],
@@ -115,6 +119,7 @@ def test_run_site_plan_saves_markdown_json_and_html(
         output=markdown_path,
         json_output=json_path,
         html_output=html_path,
+        site_output_dir=site_output_dir,
         generation_timeout=450.0,
     )
 
@@ -135,3 +140,18 @@ def test_run_site_plan_saves_markdown_json_and_html(
     assert "<!doctype html>" in saved_html.lower()
     assert "여수넷" in saved_html
     assert "https://example.com" not in saved_html
+
+    bundled_html = (site_output_dir / "index.html").read_text(
+        encoding="utf-8",
+    )
+    bundled_css = (site_output_dir / "assets" / "style.css").read_text(
+        encoding="utf-8",
+    )
+    bundled_script = (
+        site_output_dir / "assets" / "script.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'href="assets/style.css"' in bundled_html
+    assert 'src="assets/script.js"' in bundled_html
+    assert ".service-card {" in bundled_css
+    assert "scrollIntoView" in bundled_script

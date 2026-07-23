@@ -103,6 +103,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="완성된 홈페이지 HTML 저장 경로",
     )
     parser.add_argument(
+        "--site-output-dir",
+        help="HTML, CSS, JavaScript를 분리한 홈페이지 저장 폴더",
+    )
+    parser.add_argument(
         "--stop-on-error",
         action="store_true",
         help="웹사이트 수집 실패 시 즉시 중단",
@@ -128,6 +132,7 @@ def run_site_plan(
     output: str | Path = "output/site-plan.md",
     json_output: str | Path | None = None,
     html_output: str | Path | None = None,
+    site_output_dir: str | Path | None = None,
     continue_on_error: bool = True,
 ) -> SitePlan:
     answer = run_research(
@@ -179,6 +184,15 @@ def run_site_plan(
         html_path = SiteHtmlRenderer().save(plan, html_output)
         print(f"HTML 저장   : {html_path}")
 
+    if site_output_dir is not None:
+        site_paths = SiteHtmlRenderer().save_bundle(
+            plan,
+            site_output_dir,
+        )
+        print(f"사이트 저장 : {Path(site_output_dir)}")
+        for site_path in site_paths:
+            print(f"              {site_path}")
+
     print("=" * 60)
     return plan
 
@@ -204,6 +218,7 @@ def main() -> None:
             output=args.output,
             json_output=args.json_output,
             html_output=args.html_output,
+            site_output_dir=args.site_output_dir,
             continue_on_error=not args.stop_on_error,
         )
     except ValueError as error:

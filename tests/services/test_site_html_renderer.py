@@ -91,3 +91,39 @@ def test_save_writes_utf8_html_file(tmp_path) -> None:
     saved_html = output_path.read_text(encoding="utf-8")
     assert saved_html == renderer.render(make_site_plan())
     assert "여수넷" in saved_html
+
+
+def test_save_bundle_writes_separate_site_files(tmp_path) -> None:
+    output_dir = tmp_path / "site"
+    renderer = SiteHtmlRenderer()
+
+    html_path, css_path, script_path = renderer.save_bundle(
+        make_site_plan(),
+        output_dir,
+    )
+
+    assert html_path == output_dir / "index.html"
+    assert css_path == output_dir / "assets" / "style.css"
+    assert script_path == output_dir / "assets" / "script.js"
+
+    html = html_path.read_text(encoding="utf-8")
+    css = css_path.read_text(encoding="utf-8")
+    script = script_path.read_text(encoding="utf-8")
+
+    assert '<link rel="stylesheet" href="assets/style.css">' in html
+    assert '<script src="assets/script.js" defer></script>' in html
+    assert "<style>" not in html
+    assert "여수넷" in html
+    assert ":root {" in css
+    assert ".service-card {" in css
+    assert "scrollIntoView" in script
+
+
+def test_save_bundle_does_not_change_standalone_rendering(tmp_path) -> None:
+    renderer = SiteHtmlRenderer()
+    original_html = renderer.render(make_site_plan())
+
+    renderer.save_bundle(make_site_plan(), tmp_path / "site")
+
+    assert renderer.render(make_site_plan()) == original_html
+    assert "<style>" in original_html
