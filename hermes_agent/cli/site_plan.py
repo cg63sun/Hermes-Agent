@@ -6,15 +6,14 @@ from pathlib import Path
 from hermes_agent.cli.research import run_research
 from hermes_agent.generators.ollama import OllamaGenerator
 from hermes_agent.services.research_report import ResearchReport
+from hermes_agent.services.site_html_renderer import SiteHtmlRenderer
 from hermes_agent.services.site_plan import SitePlan
 from hermes_agent.services.site_plan_generator import SitePlanGenerator
 
 
 DEFAULT_QUESTION = (
-    "제공된 문맥은 모두 조사 대상 경쟁사 홈페이지에서 직접 수집한 자료입니다. "
-    "문맥에서 확인되는 사실만 사용하여 경쟁사별 주요 서비스, 가격, 제공 기능, "
-    "사후 관리, 강점, 핵심 메시지, 페이지 구성과 차별화 요소를 구분해 분석하세요. "
-    "문맥에 없는 가격, 할인율, 무료 제공 기간이나 기능은 추측하지 마세요."
+    "경쟁사 홈페이지의 주요 서비스, 강점, 핵심 메시지, "
+    "페이지 구성과 차별화 요소를 분석하세요."
 )
 
 
@@ -94,6 +93,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="기획안 JSON 저장 경로",
     )
     parser.add_argument(
+        "--html-output",
+        help="완성된 홈페이지 HTML 저장 경로",
+    )
+    parser.add_argument(
         "--stop-on-error",
         action="store_true",
         help="웹사이트 수집 실패 시 즉시 중단",
@@ -117,6 +120,7 @@ def run_site_plan(
     ollama_url: str = "http://127.0.0.1:11434",
     output: str | Path = "output/site-plan.md",
     json_output: str | Path | None = None,
+    html_output: str | Path | None = None,
     continue_on_error: bool = True,
 ) -> SitePlan:
     answer = run_research(
@@ -162,6 +166,10 @@ def run_site_plan(
         json_path = plan.save_json(json_output)
         print(f"JSON 저장   : {json_path}")
 
+    if html_output is not None:
+        html_path = SiteHtmlRenderer().save(plan, html_output)
+        print(f"HTML 저장   : {html_path}")
+
     print("=" * 60)
     return plan
 
@@ -185,6 +193,7 @@ def main() -> None:
             ollama_url=args.ollama_url,
             output=args.output,
             json_output=args.json_output,
+            html_output=args.html_output,
             continue_on_error=not args.stop_on_error,
         )
     except ValueError as error:
