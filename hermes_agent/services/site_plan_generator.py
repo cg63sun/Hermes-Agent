@@ -50,23 +50,52 @@ class SitePlanGenerator:
             goal=goal,
         )
 
-        response = self._generator.generate(prompt)
-        data = self._parse_response(response)
+        for attempt in range(2):
+            response = self._generator.generate(prompt)
 
-        return SitePlan(
-            business_name=business_name,
-            business_type=business_type,
-            target_audience=target_audience,
-            goal=goal,
-            concept=self._manual_review_value(
-                self._required_value(data, "concept"),
-            ),
-            key_messages=self._string_list(
-                data,
-                "key_messages",
-            ),
-            sections=self._sections(data),
-            source_urls=list(report.urls),
+            try:
+                data = self._parse_response(response)
+                return SitePlan(
+                    business_name=business_name,
+                    business_type=business_type,
+                    target_audience=target_audience,
+                    goal=goal,
+                    concept=self._manual_review_value(
+                        self._required_value(data, "concept"),
+                    ),
+                    key_messages=self._string_list(
+                        data,
+                        "key_messages",
+                    ),
+                    sections=self._sections(data),
+                    source_urls=list(report.urls),
+                )
+            except ValueError as error:
+                if attempt == 1:
+                    raise
+
+                prompt = self._build_retry_prompt(
+                    original_prompt=prompt,
+                    error=error,
+                )
+
+        raise RuntimeError("Site plan generation did not complete.")
+
+    @staticmethod
+    def _build_retry_prompt(
+        *,
+        original_prompt: str,
+        error: ValueError,
+    ) -> str:
+        return (
+            f"{original_prompt}\n\n"
+            "[JSON 형식 오류 재생성 요청]\n"
+            f"이전 응답 오류: {error}\n"
+            "기획안 내용을 유지하되 JSON 전체를 처음부터 다시 출력하세요.\n"
+            "concept, key_messages, sections를 반드시 포함하세요.\n"
+            "sections의 모든 항목에는 name, purpose, headline, content, "
+            "call_to_action을 반드시 포함하세요.\n"
+            "설명이나 마크다운 코드 블록 없이 JSON 객체 하나만 출력하세요."
         )
 
     def _build_prompt(

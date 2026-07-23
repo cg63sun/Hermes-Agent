@@ -104,6 +104,41 @@ def test_generate_rejects_invalid_json() -> None:
         )
 
 
+def test_generate_retries_when_section_name_is_missing() -> None:
+    invalid_response = json.dumps(
+        {
+            "concept": "신뢰를 주는 지역 밀착형 홈페이지",
+            "key_messages": ["맞춤형 서비스"],
+            "sections": [
+                {
+                    "purpose": "핵심 서비스 소개",
+                    "headline": "사업에 꼭 맞는 홈페이지",
+                    "content": "고객의 목표에 맞춰 제작합니다.",
+                    "call_to_action": "상담 신청",
+                },
+            ],
+        },
+        ensure_ascii=False,
+    )
+    generator = SequenceGenerator(
+        responses=[invalid_response, _response()],
+    )
+    service = SitePlanGenerator(generator=generator)
+
+    plan = service.generate(
+        _report(),
+        business_name="여수넷",
+        business_type="홈페이지 제작",
+        target_audience="지역 소상공인",
+        goal="상담 문의 증가",
+    )
+
+    assert plan.sections[0].name == "메인"
+    assert len(generator.prompts) == 2
+    assert "Generator response must include name." in generator.prompts[1]
+    assert "sections의 모든 항목에는 name" in generator.prompts[1]
+
+
 def test_generate_marks_unverified_terms_for_manual_review() -> None:
     response = json.dumps(
         {
