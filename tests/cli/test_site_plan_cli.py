@@ -52,6 +52,7 @@ def test_site_plan_parser_reads_arguments() -> None:
     assert args.embedding_model == "nomic-embed-text"
     assert args.top_k == 5
     assert args.chunk_size == 500
+    assert args.generation_timeout == 300.0
     assert args.json_output == "output/site-plan.json"
     assert args.html_output == "output/index.html"
 
@@ -69,9 +70,16 @@ def test_run_site_plan_saves_markdown_json_and_html(
         return "경쟁사는 빠른 상담과 맞춤 서비스를 강조합니다."
 
     class FakeOllamaGenerator:
-        def __init__(self, *, model: str, base_url: str) -> None:
+        def __init__(
+            self,
+            *,
+            model: str,
+            base_url: str,
+            timeout: float,
+        ) -> None:
             captured["model"] = model
             captured["base_url"] = base_url
+            captured["generation_timeout"] = timeout
 
     class FakeSitePlanGenerator:
         def __init__(self, *, generator) -> None:
@@ -107,11 +115,14 @@ def test_run_site_plan_saves_markdown_json_and_html(
         output=markdown_path,
         json_output=json_path,
         html_output=html_path,
+        generation_timeout=450.0,
     )
 
     assert result is plan
     assert captured["model"] == "qwen3:8b"
     assert captured["urls"] == ["https://example.com"]
+    assert captured["generation_timeout"] == 450.0
+    assert captured["research_options"]["generation_timeout"] == 450.0
     assert captured["report"].answer.startswith("경쟁사는")
     assert "# 여수넷 홈페이지 기획안" in markdown_path.read_text(
         encoding="utf-8",

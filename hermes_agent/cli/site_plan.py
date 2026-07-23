@@ -83,6 +83,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ollama 서버 주소",
     )
     parser.add_argument(
+        "--generation-timeout",
+        type=float,
+        default=300.0,
+        help="Ollama 생성 요청 제한시간(초)",
+    )
+    parser.add_argument(
         "--output",
         "-o",
         default="output/site-plan.md",
@@ -118,6 +124,7 @@ def run_site_plan(
     generation_model: str = "qwen3:8b",
     embedding_model: str = "nomic-embed-text",
     ollama_url: str = "http://127.0.0.1:11434",
+    generation_timeout: float = 300.0,
     output: str | Path = "output/site-plan.md",
     json_output: str | Path | None = None,
     html_output: str | Path | None = None,
@@ -131,6 +138,7 @@ def run_site_plan(
         generation_model=generation_model,
         embedding_model=embedding_model,
         ollama_url=ollama_url,
+        generation_timeout=generation_timeout,
         continue_on_error=continue_on_error,
     )
 
@@ -143,6 +151,7 @@ def run_site_plan(
         generator=OllamaGenerator(
             model=generation_model,
             base_url=ollama_url,
+            timeout=generation_timeout,
         ),
     )
     plan = service.generate(
@@ -191,6 +200,7 @@ def main() -> None:
             generation_model=args.model,
             embedding_model=args.embedding_model,
             ollama_url=args.ollama_url,
+            generation_timeout=args.generation_timeout,
             output=args.output,
             json_output=args.json_output,
             html_output=args.html_output,

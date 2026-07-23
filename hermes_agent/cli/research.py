@@ -110,6 +110,7 @@ def run_research(
     generation_model: str = "qwen3:8b",
     embedding_model: str = "nomic-embed-text",
     ollama_url: str = "http://127.0.0.1:11434",
+    generation_timeout: float = 300.0,
     output: str | Path | None = None,
     continue_on_error: bool = True,
 ) -> str:
@@ -145,6 +146,7 @@ def run_research(
         generation_model_name=generation_model,
         embedding_model_name=embedding_model,
         ollama_base_url=ollama_url,
+        generation_timeout=generation_timeout,
     )
 
     print("=" * 60)
