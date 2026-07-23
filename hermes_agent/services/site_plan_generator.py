@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from hermes_agent.generators.base import BaseGenerator
@@ -41,16 +42,15 @@ class SitePlanGenerator:
         )
         goal = self._required(goal, "goal")
 
-        response = self._generator.generate(
-            self._build_prompt(
-                report=report,
-                business_name=business_name,
-                business_type=business_type,
-                target_audience=target_audience,
-                goal=goal,
-            ),
+        prompt = self._build_prompt(
+            report=report,
+            business_name=business_name,
+            business_type=business_type,
+            target_audience=target_audience,
+            goal=goal,
         )
 
+        response = self._generator.generate(prompt)
         data = self._parse_response(response)
 
         return SitePlan(
@@ -58,7 +58,9 @@ class SitePlanGenerator:
             business_type=business_type,
             target_audience=target_audience,
             goal=goal,
-            concept=self._required_value(data, "concept"),
+            concept=self._manual_review_value(
+                self._required_value(data, "concept"),
+            ),
             key_messages=self._string_list(
                 data,
                 "key_messages",
@@ -79,6 +81,11 @@ class SitePlanGenerator:
         return (
             "아래 경쟁사 연구 결과를 참고하여 홈페이지 기획안을 작성하세요.\n"
             "연구 내용을 그대로 복사하지 말고 공통 장점과 차별점을 반영하세요.\n"
+            "경쟁사의 핵심 장점, 가격, 혜택, 제작 범위와 사후 관리 조건을 "
+            "아래 사업의 홈페이지 초안에 적극적으로 반영하세요.\n"
+            "가격, 수치, 기간, 무료·무상, 할인, 보장처럼 사업자가 직접 "
+            "확인해야 하는 조건도 초안에서 삭제하지 마세요.\n"
+            "이러한 조건은 최종 확정 전 직접 수정할 수 있도록 유지하세요.\n"
             "반드시 설명이나 마크다운 없이 JSON 객체 하나만 출력하세요.\n\n"
             "[사업 정보]\n"
             f"상호: {business_name}\n"
@@ -133,6 +140,38 @@ class SitePlanGenerator:
         return data
 
     @classmethod
+    def _manual_review_value(
+        cls,
+        value: str,
+    ) -> str:
+        value = value.strip()
+
+        if value.startswith("[직접 수정 필요]"):
+            return value
+
+        text = value
+
+        # Free consultations and estimates are ordinary calls to action.
+        for allowed_phrase in (
+            "무료 상담",
+            "상담 무료",
+            "무료 견적",
+        ):
+            text = text.replace(allowed_phrase, "상담")
+
+        patterns = (
+            r"\d+(?:[.,]\d+)?\s*(?:원|천원|만원|억원|%|퍼센트)",
+            r"\d+\s*(?:일|주|개월|달|년)(?:간|동안|까지)?",
+            r"무료|무상|할인|보장|일정\s*기간",
+            r"(?:기본형|템플릿형|맞춤형).{0,30}(?:제공|선택|구성)",
+        )
+
+        if any(re.search(pattern, text) for pattern in patterns):
+            return f"[직접 수정 필요] {value}"
+
+        return value
+
+    @classmethod
     def _sections(
         cls,
         data: dict[str, Any],
@@ -154,22 +193,32 @@ class SitePlanGenerator:
 
             sections.append(
                 SiteSection(
-                    name=cls._required_value(raw_section, "name"),
-                    purpose=cls._required_value(
-                        raw_section,
-                        "purpose",
+                    name=cls._manual_review_value(
+                        cls._required_value(raw_section, "name"),
                     ),
-                    headline=cls._required_value(
-                        raw_section,
-                        "headline",
+                    purpose=cls._manual_review_value(
+                        cls._required_value(
+                            raw_section,
+                            "purpose",
+                        ),
                     ),
-                    content=cls._required_value(
-                        raw_section,
-                        "content",
+                    headline=cls._manual_review_value(
+                        cls._required_value(
+                            raw_section,
+                            "headline",
+                        ),
                     ),
-                    call_to_action=cls._optional_value(
-                        raw_section,
-                        "call_to_action",
+                    content=cls._manual_review_value(
+                        cls._required_value(
+                            raw_section,
+                            "content",
+                        ),
+                    ),
+                    call_to_action=cls._manual_review_value(
+                        cls._optional_value(
+                            raw_section,
+                            "call_to_action",
+                        ),
                     ),
                 ),
             )
@@ -190,7 +239,9 @@ class SitePlanGenerator:
             )
 
         return [
-            cls._required(str(value), key)
+            cls._manual_review_value(
+                cls._required(str(value), key),
+            )
             for value in values
         ]
 
