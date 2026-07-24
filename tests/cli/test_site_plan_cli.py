@@ -13,13 +13,19 @@ def _plan() -> SitePlan:
         target_audience="지역 소상공인",
         goal="상담 문의 증가",
         concept="신뢰할 수 있는 AI 웹에이전시",
-        key_messages=["맞춤형 홈페이지", "AI 챗봇 기본 탑재"],
+        key_messages=[
+            "맞춤형 홈페이지",
+            "AI 챗봇 기본 탑재",
+        ],
         sections=[
             SiteSection(
                 name="메인",
                 purpose="핵심 서비스 소개",
                 headline="홈페이지에 AI를 더합니다",
-                content="홈페이지 제작과 AI 기능을 함께 제공합니다.",
+                content=(
+                    "홈페이지 제작과 AI 기능을 "
+                    "함께 제공합니다."
+                ),
                 call_to_action="무료 상담 신청",
             ),
         ],
@@ -39,6 +45,8 @@ def test_site_plan_parser_reads_arguments() -> None:
             "지역 소상공인",
             "--goal",
             "상담 문의 증가",
+            "--source",
+            "https://example.com",
             "--json-output",
             "output/site-plan.json",
             "--html-output",
@@ -53,6 +61,7 @@ def test_site_plan_parser_reads_arguments() -> None:
     assert args.model == "qwen3:8b"
     assert args.embedding_model == "nomic-embed-text"
     assert args.top_k == 5
+    assert args.source == "https://example.com"
     assert args.chunk_size == 500
     assert args.generation_timeout == 300.0
     assert args.json_output == "output/site-plan.json"
@@ -95,7 +104,11 @@ def test_run_site_plan_saves_markdown_json_and_html(
             captured["plan_options"] = kwargs
             return plan
 
-    monkeypatch.setattr(site_plan_cli, "run_research", fake_run_research)
+    monkeypatch.setattr(
+        site_plan_cli,
+        "run_research",
+        fake_run_research,
+    )
     monkeypatch.setattr(
         site_plan_cli,
         "OllamaGenerator",
@@ -118,6 +131,7 @@ def test_run_site_plan_saves_markdown_json_and_html(
         business_type="홈페이지 제작",
         target_audience="지역 소상공인",
         goal="상담 문의 증가",
+        source="https://example.com",
         output=markdown_path,
         json_output=json_path,
         html_output=html_path,
@@ -129,6 +143,7 @@ def test_run_site_plan_saves_markdown_json_and_html(
     assert captured["model"] == "qwen3:8b"
     assert captured["urls"] == ["https://example.com"]
     assert captured["generation_timeout"] == 450.0
+
     json_schema = captured["json_schema"]
 
     assert isinstance(json_schema, dict)
@@ -137,33 +152,54 @@ def test_run_site_plan_saves_markdown_json_and_html(
         "key_messages",
         "sections",
     ]
-    assert json_schema["properties"]["sections"]["items"]["required"] == [
+    assert json_schema["properties"]["sections"]["items"][
+        "required"
+    ] == [
         "name",
         "purpose",
         "headline",
         "content",
         "call_to_action",
     ]
-    assert captured["research_options"]["generation_timeout"] == 450.0
-    assert captured["report"].answer.startswith("경쟁사는")
-    assert "# 여수넷 홈페이지 기획안" in markdown_path.read_text(
+
+    research_options = captured["research_options"]
+
+    assert (
+        research_options["generation_timeout"]
+        == 450.0
+    )
+    assert (
+        research_options["source"]
+        == "https://example.com"
+    )
+    assert captured["report"].answer.startswith(
+        "경쟁사는",
+    )
+
+    assert "# 여수넷 홈페이지 기획안" in (
+        markdown_path.read_text(encoding="utf-8")
+    )
+
+    saved_json = json.loads(
+        json_path.read_text(encoding="utf-8"),
+    )
+    assert saved_json["business_name"] == "여수넷"
+
+    saved_html = html_path.read_text(
         encoding="utf-8",
     )
-    assert json.loads(json_path.read_text(encoding="utf-8"))[
-        "business_name"
-    ] == "여수넷"
-
-    saved_html = html_path.read_text(encoding="utf-8")
     assert "<!doctype html>" in saved_html.lower()
     assert "여수넷" in saved_html
     assert "https://example.com" not in saved_html
 
-    bundled_html = (site_output_dir / "index.html").read_text(
-        encoding="utf-8",
-    )
-    bundled_css = (site_output_dir / "assets" / "style.css").read_text(
-        encoding="utf-8",
-    )
+    bundled_html = (
+        site_output_dir / "index.html"
+    ).read_text(encoding="utf-8")
+
+    bundled_css = (
+        site_output_dir / "assets" / "style.css"
+    ).read_text(encoding="utf-8")
+
     bundled_script = (
         site_output_dir / "assets" / "script.js"
     ).read_text(encoding="utf-8")

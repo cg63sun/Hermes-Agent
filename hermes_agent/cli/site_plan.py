@@ -62,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="연구 답변에 사용할 검색 결과 수",
     )
     parser.add_argument(
+        "--source",
+        default=None,
+        help="경쟁사 검색 대상을 제한할 출처 URL",
+    )
+    parser.add_argument(
         "--chunk-size",
         type=int,
         default=500,
@@ -124,6 +129,7 @@ def run_site_plan(
     goal: str,
     question: str = DEFAULT_QUESTION,
     top_k: int = 5,
+    source: str | None = None,
     chunk_size: int = 500,
     generation_model: str = "qwen3:8b",
     embedding_model: str = "nomic-embed-text",
@@ -139,6 +145,7 @@ def run_site_plan(
         urls,
         question=question,
         top_k=top_k,
+        source=source,
         chunk_size=chunk_size,
         generation_model=generation_model,
         embedding_model=embedding_model,
@@ -152,6 +159,7 @@ def run_site_plan(
         question=question.strip(),
         answer=answer,
     )
+
     service = SitePlanGenerator(
         generator=OllamaGenerator(
             model=generation_model,
@@ -208,6 +216,7 @@ def run_site_plan(
             },
         ),
     )
+
     plan = service.generate(
         report,
         business_name=business_name,
@@ -230,7 +239,10 @@ def run_site_plan(
         print(f"JSON 저장   : {json_path}")
 
     if html_output is not None:
-        html_path = SiteHtmlRenderer().save(plan, html_output)
+        html_path = SiteHtmlRenderer().save(
+            plan,
+            html_output,
+        )
         print(f"HTML 저장   : {html_path}")
 
     if site_output_dir is not None:
@@ -239,10 +251,12 @@ def run_site_plan(
             site_output_dir,
         )
         print(f"사이트 저장 : {Path(site_output_dir)}")
+
         for site_path in site_paths:
             print(f"              {site_path}")
 
     print("=" * 60)
+
     return plan
 
 
@@ -259,6 +273,7 @@ def main() -> None:
             goal=args.goal,
             question=args.question,
             top_k=args.top_k,
+            source=args.source,
             chunk_size=args.chunk_size,
             generation_model=args.model,
             embedding_model=args.embedding_model,
@@ -286,3 +301,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
