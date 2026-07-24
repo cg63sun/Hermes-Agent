@@ -16,6 +16,7 @@ class VectorStore(ABC):
         self,
         embedding: list[float],
         top_k: int = 5,
+        source: str | None = None,
     ) -> list[Chunk]:
         """가장 유사한 Chunk를 검색합니다."""
         raise NotImplementedError

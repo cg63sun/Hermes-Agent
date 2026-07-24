@@ -22,14 +22,26 @@ class MemoryVectorStore(VectorStore):
         self,
         embedding: list[float],
         top_k: int = 5,
+        source: str | None = None,
     ) -> list[Chunk]:
-
         scored = []
 
         for chunk, vector in self._items:
+            if (
+                source is not None
+                and chunk.metadata.get("source") != source
+            ):
+                continue
+
             score = cosine_similarity(embedding, vector)
             scored.append((score, chunk))
 
-        scored.sort(key=lambda x: x[0], reverse=True)
+        scored.sort(
+            key=lambda item: item[0],
+            reverse=True,
+        )
 
-        return [chunk for _, chunk in scored[:top_k]]
+        return [
+            chunk
+            for _, chunk in scored[:top_k]
+        ]

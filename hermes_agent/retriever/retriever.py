@@ -16,10 +16,12 @@ class Retriever:
         self,
         query: str,
         top_k: int = 5,
+        source: str | None = None,
     ) -> list[Chunk]:
         embedding = self._embedding_model.embed(query)
 
         return self._vector_store.search(
             embedding,
             top_k,
+            source=source,
         )

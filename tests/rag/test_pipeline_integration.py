@@ -59,3 +59,50 @@ def test_rag_pipeline_with_real_components() -> None:
     )
 
     assert result == "Python 관련 답변입니다."
+def test_retriever_filters_chunks_by_source() -> None:
+    embedding_model = MockEmbeddingModel()
+    vector_store = MemoryVectorStore()
+
+    python_chunk = Chunk(
+        id="chunk-1",
+        document_id="doc-1",
+        index=0,
+        content="Python",
+        metadata={
+            "source": "https://python.example.com",
+        },
+    )
+
+    banana_chunk = Chunk(
+        id="chunk-2",
+        document_id="doc-2",
+        index=0,
+        content="Banana",
+        metadata={
+            "source": "https://banana.example.com",
+        },
+    )
+
+    vector_store.add(
+        chunks=[
+            python_chunk,
+            banana_chunk,
+        ],
+        embeddings=[
+            embedding_model.embed(python_chunk.content),
+            embedding_model.embed(banana_chunk.content),
+        ],
+    )
+
+    retriever = Retriever(
+        embedding_model=embedding_model,
+        vector_store=vector_store,
+    )
+
+    chunks = retriever.retrieve(
+        query="Python",
+        top_k=1,
+        source="https://banana.example.com",
+    )
+
+    assert chunks == [banana_chunk]
