@@ -18,8 +18,10 @@ class WebsiteRAGService:
         self,
         question: str,
         top_k: int = 5,
+        source: str | None = None,
     ) -> str:
         return self._pipeline.answer(
             question=question,
             top_k=top_k,
+            source=source,
         )
