@@ -41,6 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--source",
+        default=None,
+        help="검색 대상을 제한할 출처 URL",
+    )
+
+    parser.add_argument(
         "--chunk-size",
         type=int,
         default=500,
@@ -63,6 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--ollama-url",
         default="http://127.0.0.1:11434",
         help="Ollama 서버 주소",
+    )
+
+    parser.add_argument(
+        "--generation-timeout",
+        type=float,
+        default=300.0,
+        help="Ollama 답변 생성 제한 시간(초)",
     )
 
     parser.add_argument(
@@ -106,6 +119,7 @@ def run_research(
     *,
     question: str,
     top_k: int = 5,
+    source: str | None = None,
     chunk_size: int = 500,
     generation_model: str = "qwen3:8b",
     embedding_model: str = "nomic-embed-text",
@@ -140,6 +154,16 @@ def run_research(
         raise ValueError(
             "chunk_size는 1 이상이어야 합니다."
         )
+
+    if generation_timeout <= 0:
+        raise ValueError(
+            "generation_timeout은 0보다 커야 합니다."
+        )
+
+    normalized_source = None
+
+    if source is not None:
+        normalized_source = validate_url(source)
 
     service = ResearchRAGFactory.create(
         chunk_size=chunk_size,
@@ -199,6 +223,7 @@ def run_research(
     answer = service.answer(
         normalized_question,
         top_k=top_k,
+        source=normalized_source,
     )
 
     print("=" * 60)
@@ -236,10 +261,12 @@ def main() -> None:
             urls=args.urls,
             question=args.question,
             top_k=args.top_k,
+            source=args.source,
             chunk_size=args.chunk_size,
             generation_model=args.model,
             embedding_model=args.embedding_model,
             ollama_url=args.ollama_url,
+            generation_timeout=args.generation_timeout,
             output=args.output,
             continue_on_error=not args.stop_on_error,
         )
