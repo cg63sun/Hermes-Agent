@@ -21,11 +21,17 @@ class RAGPipeline:
         self,
         question: str,
         top_k: int = 5,
+        source: str | None = None,
     ) -> str:
-        chunks = self._retriever.retrieve(
-            query=question,
-            top_k=top_k,
-        )
+        retrieve_kwargs = {
+            "query": question,
+            "top_k": top_k,
+        }
+
+        if source is not None:
+            retrieve_kwargs["source"] = source
+
+        chunks = self._retriever.retrieve(**retrieve_kwargs)
 
         context = self._context_builder.build(chunks)
 

@@ -1,3 +1,4 @@
+from unittest.mock import Mock
 from hermes_agent.embeddings import MockEmbeddingModel
 from hermes_agent.generators import MockGenerator
 from hermes_agent.rag import (
@@ -106,3 +107,30 @@ def test_retriever_filters_chunks_by_source() -> None:
     )
 
     assert chunks == [banana_chunk]
+
+def test_rag_pipeline_passes_source_to_retriever() -> None:
+    retriever = Mock(spec=Retriever)
+    retriever.retrieve.return_value = []
+
+    pipeline = RAGPipeline(
+        retriever=retriever,
+        context_builder=ContextBuilder(),
+        prompt_builder=PromptBuilder(),
+        generator=MockGenerator(
+            response="경쟁사 분석 결과",
+        ),
+    )
+
+    result = pipeline.answer(
+        question="서비스와 가격을 분석해줘",
+        top_k=5,
+        source="https://competitor.example.com",
+    )
+
+    assert result == "경쟁사 분석 결과"
+
+    retriever.retrieve.assert_called_once_with(
+        query="서비스와 가격을 분석해줘",
+        top_k=5,
+        source="https://competitor.example.com",
+    )
