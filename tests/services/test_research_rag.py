@@ -39,14 +39,17 @@ class MockRAGPipeline:
         self.answer_text = answer_text
         self.received_questions: list[str] = []
         self.received_top_k: list[int] = []
+        self.received_sources: list[str | None] = []
 
     def answer(
         self,
         question: str,
         top_k: int = 5,
+        source: str | None = None,
     ) -> str:
         self.received_questions.append(question)
         self.received_top_k.append(top_k)
+        self.received_sources.append(source)
 
         return self.answer_text
 
@@ -206,3 +209,20 @@ def test_research_rag_service_creates_report() -> None:
     ]
     assert pipeline.received_top_k == [3]
 
+def test_research_rag_service_passes_source() -> None:
+    service, _, pipeline = create_service()
+
+    answer = service.answer(
+        "회사 소개를 알려줘.",
+        top_k=3,
+        source="https://example.com",
+    )
+
+    assert answer == "테스트 답변입니다."
+    assert pipeline.received_questions == [
+        "회사 소개를 알려줘.",
+    ]
+    assert pipeline.received_top_k == [3]
+    assert pipeline.received_sources == [
+        "https://example.com",
+    ]
