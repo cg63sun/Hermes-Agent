@@ -148,7 +148,7 @@ def test_render_includes_extended_design_sections() -> None:
 
     assert '<section class="ai-section" id="ai">' in html
     assert 'class="chat-demo"' in html
-    assert "홈페이지와 AI 챗봇을 한 번에 준비하세요." in html
+    assert "방문자가 궁금한 순간," in html
 
     assert '<section class="closing" id="contact">' in html
 
@@ -170,7 +170,7 @@ def test_save_bundle_contains_extended_design_assets(tmp_path) -> None:
     assert ".process-grid {" in css
     assert ".ai-box {" in css
     assert ".chat-demo {" in css
-    assert "@media (max-width: 760px)" in css
+    assert "@media (max-width: 680px)" in css
 
     assert 'document.querySelectorAll(\'a[href^="#"]\')' in script
     assert "scrollIntoView" in script
