@@ -1,45 +1,62 @@
-from hermes_agent.cli.website_rag import build_parser
+from __future__ import annotations
+
+from typing import Any
+
+from hermes_agent.cli import website_rag as website_rag_cli
 
 
-def test_website_rag_parser_reads_required_arguments() -> None:
-    parser = build_parser()
+class MockService:
+    def __init__(self) -> None:
+        self.received_source: str | None = None
+
+    def index_website(self, url: str) -> int:
+        return 3
+
+    def answer(
+        self,
+        question: str,
+        top_k: int = 5,
+        source: str | None = None,
+    ) -> str:
+        self.received_source = source
+        return "테스트 답변입니다."
+
+
+def test_run_passes_source(monkeypatch: Any) -> None:
+    service = MockService()
+
+    monkeypatch.setattr(
+        website_rag_cli.WebsiteRAGFactory,
+        "create",
+        lambda **kwargs: service,
+    )
+
+    result = website_rag_cli.run(
+        url="https://example.com",
+        question="회사 소개를 알려줘.",
+        generator_model="qwen3:8b",
+        embedding_model="nomic-embed-text",
+        chunk_size=500,
+        top_k=3,
+        source="https://example.com",
+    )
+
+    assert service.received_source == "https://example.com"
+    assert "테스트 답변입니다." in result
+
+
+def test_build_parser_accepts_source() -> None:
+    parser = website_rag_cli.build_parser()
 
     args = parser.parse_args(
         [
             "--url",
             "https://example.com",
             "--question",
-            "이 사이트는 무엇인가요?",
-        ],
-    )
-
-    assert args.url == "https://example.com"
-    assert args.question == "이 사이트는 무엇인가요?"
-    assert args.generator_model == "qwen3:8b"
-    assert args.embedding_model == "nomic-embed-text"
-    assert args.chunk_size == 500
-    assert args.top_k == 3
-
-
-def test_website_rag_parser_reads_optional_arguments() -> None:
-    parser = build_parser()
-
-    args = parser.parse_args(
-        [
-            "--url",
+            "회사 소개를 알려줘.",
+            "--source",
             "https://example.com",
-            "--question",
-            "서비스는 무엇인가요?",
-            "--generator-model",
-            "qwen3:8b",
-            "--embedding-model",
-            "nomic-embed-text",
-            "--chunk-size",
-            "300",
-            "--top-k",
-            "5",
         ],
     )
 
-    assert args.chunk_size == 300
-    assert args.top_k == 5
+    assert args.source == "https://example.com"

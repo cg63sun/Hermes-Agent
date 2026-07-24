@@ -48,9 +48,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--top-k",
+        "--source",
         type=int,
-        default=3,
-        help="검색할 청크 개수",
+        default=None,
+        help="검색 대상을 제한할 출처 URL",
     )
 
     return parser
@@ -63,6 +64,7 @@ def run(
     embedding_model: str,
     chunk_size: int,
     top_k: int,
+    source: str | None = None,
 ) -> str:
     service = WebsiteRAGFactory.create(
         embedding_model=OllamaEmbeddingModel(
@@ -79,6 +81,7 @@ def run(
     answer = service.answer(
         question=question,
         top_k=top_k,
+        source=source,
     )
 
     return (
@@ -99,6 +102,7 @@ def main() -> int:
             embedding_model=args.embedding_model,
             chunk_size=args.chunk_size,
             top_k=args.top_k,
+            source=args.source,
         )
     except httpx.ConnectError:
         print(
