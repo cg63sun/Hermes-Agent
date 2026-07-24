@@ -62,6 +62,7 @@ class ResearchRAGService:
         question: str,
         *,
         top_k: int = 5,
+        source: str | None = None,
         continue_on_error: bool = True,
     ) -> ResearchReport:
         normalized_question = question.strip()
@@ -74,6 +75,7 @@ class ResearchRAGService:
         answer = self.answer(
             normalized_question,
             top_k=top_k,
+            source=source,
         )
 
         failures = [

@@ -226,3 +226,18 @@ def test_research_rag_service_passes_source() -> None:
     assert pipeline.received_sources == [
         "https://example.com",
     ]
+
+def test_research_rag_service_research_passes_source() -> None:
+    service, _, pipeline = create_service()
+
+    report = service.research(
+        ["https://example.com"],
+        "회사 소개를 알려줘.",
+        top_k=3,
+        source="https://example.com",
+    )
+
+    assert report.answer == "테스트 답변입니다."
+    assert pipeline.received_sources == [
+        "https://example.com",
+    ]
