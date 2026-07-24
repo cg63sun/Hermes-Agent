@@ -127,3 +127,50 @@ def test_save_bundle_does_not_change_standalone_rendering(tmp_path) -> None:
 
     assert renderer.render(make_site_plan()) == original_html
     assert "<style>" in original_html
+
+def test_render_includes_extended_design_sections() -> None:
+    html = SiteHtmlRenderer().render(make_site_plan())
+
+    assert 'href="#services"' in html
+    assert 'href="#process"' in html
+    assert 'href="#ai"' in html
+    assert 'href="#contact"' in html
+
+    assert 'class="hero-visual"' in html
+    assert "AI 상담 운영 중" in html
+
+    assert '<section class="process" id="process">' in html
+    assert html.count('class="process-card"') == 4
+    assert "상담과 목표 설정" in html
+    assert "기획과 콘텐츠 구성" in html
+    assert "디자인과 개발" in html
+    assert "검수와 운영 지원" in html
+
+    assert '<section class="ai-section" id="ai">' in html
+    assert 'class="chat-demo"' in html
+    assert "홈페이지와 AI 챗봇을 한 번에 준비하세요." in html
+
+    assert '<section class="closing" id="contact">' in html
+
+
+def test_save_bundle_contains_extended_design_assets(tmp_path) -> None:
+    output_dir = tmp_path / "site"
+    renderer = SiteHtmlRenderer()
+
+    _, css_path, script_path = renderer.save_bundle(
+        make_site_plan(),
+        output_dir,
+    )
+
+    css = css_path.read_text(encoding="utf-8")
+    script = script_path.read_text(encoding="utf-8")
+
+    assert ".hero-grid {" in css
+    assert ".hero-visual {" in css
+    assert ".process-grid {" in css
+    assert ".ai-box {" in css
+    assert ".chat-demo {" in css
+    assert "@media (max-width: 760px)" in css
+
+    assert 'document.querySelectorAll(\'a[href^="#"]\')' in script
+    assert "scrollIntoView" in script
