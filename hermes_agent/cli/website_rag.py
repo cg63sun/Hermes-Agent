@@ -48,8 +48,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--top-k",
-        "--source",
         type=int,
+        default=5,
+        help="검색할 관련 청크 수",
+    )
+
+    parser.add_argument(
+        "--source",
         default=None,
         help="검색 대상을 제한할 출처 URL",
     )
