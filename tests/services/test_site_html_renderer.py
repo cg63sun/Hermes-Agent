@@ -74,7 +74,7 @@ def test_render_escapes_plan_text() -> None:
 
     html = SiteHtmlRenderer().render(plan)
 
-    assert "<script>" not in html
+    assert '<script>alert("x")</script>' not in html
     assert "&lt;script&gt;" in html
     assert "<strong>안전한 내용</strong>" not in html
     assert "&lt;strong&gt;안전한 내용&lt;/strong&gt;" in html
@@ -174,3 +174,39 @@ def test_save_bundle_contains_extended_design_assets(tmp_path) -> None:
 
     assert 'document.querySelectorAll(\'a[href^="#"]\')' in script
     assert "scrollIntoView" in script
+
+
+def test_render_includes_contact_form_and_inline_behavior() -> None:
+    html = SiteHtmlRenderer().render(make_site_plan())
+
+    assert '<form class="contact-form" id="contact-form"' in html
+    assert 'name="name"' in html
+    assert 'name="phone"' in html
+    assert 'name="message"' in html
+    assert 'name="privacy"' in html
+    assert 'class="form-status"' in html
+    assert 'data-webhook-url=""' in html
+    assert "contactForm.checkValidity()" in html
+    assert "상담 신청이 완료되었습니다." in html
+
+
+def test_save_bundle_moves_contact_behavior_to_external_script(tmp_path) -> None:
+    renderer = SiteHtmlRenderer()
+    html_path, css_path, script_path = renderer.save_bundle(
+        make_site_plan(),
+        tmp_path / "site",
+    )
+
+    html = html_path.read_text(encoding="utf-8")
+    css = css_path.read_text(encoding="utf-8")
+    script = script_path.read_text(encoding="utf-8")
+
+    assert '<script>alert("x")</script>' not in html
+    assert '<script src="assets/script.js" defer></script>' in html
+    assert ".contact-form {" in css
+    assert ".form-row {" in css
+    assert 'document.querySelector("#contact-form")' in script
+    assert "contactForm.checkValidity()" in script
+    assert "fetch(webhookUrl" in script
+    assert "submitButton.disabled = true" in script
+    assert "submitButton.disabled = false" in script

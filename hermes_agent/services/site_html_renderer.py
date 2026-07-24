@@ -11,6 +11,8 @@ class SiteHtmlRenderer:
 
     _STYLE_OPEN = "  <style>\n"
     _STYLE_CLOSE = "  </style>\n"
+    _SCRIPT_OPEN = "  <script>\n"
+    _SCRIPT_CLOSE = "  </script>\n"
     _EXTERNAL_STYLESHEET = '  <link rel="stylesheet" href="assets/style.css">\n'
     _EXTERNAL_SCRIPT = '  <script src="assets/script.js" defer></script>\n'
 
@@ -295,15 +297,28 @@ class SiteHtmlRenderer:
     .bubble.question {{ margin-left: auto; background: var(--primary); color: #fff; border-bottom-right-radius: 5px; }}
     .bubble.answer {{ background: var(--soft); border-bottom-left-radius: 5px; }}
 
-    .closing {{ padding: 92px 0; color: #fff; background: var(--primary); text-align: center; }}
+    .closing {{ padding: 92px 0; color: #fff; background: var(--primary); }}
+    .contact-grid {{ display: grid; grid-template-columns: .85fr 1.15fr; align-items: center; gap: 64px; }}
     .closing h2 {{ margin: 0; font-size: clamp(2.15rem, 4vw, 3.5rem); line-height: 1.22; letter-spacing: -.05em; }}
-    .closing p {{ max-width: 700px; margin: 18px auto 30px; color: #dce7ff; }}
-    .closing .secondary-cta {{ color: var(--ink); background: #fff; border: 0; }}
+    .closing p {{ max-width: 700px; margin: 18px 0 0; color: #dce7ff; }}
+    .contact-form {{ display: grid; gap: 18px; padding: 34px; border-radius: 28px; color: var(--ink); background: #fff; box-shadow: 0 24px 60px rgba(8, 36, 91, .24); }}
+    .form-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+    .form-field {{ display: grid; gap: 7px; text-align: left; }}
+    .form-field label {{ font-size: .9rem; font-weight: 800; }}
+    .form-field input, .form-field textarea {{ width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fff; font: inherit; }}
+    .form-field textarea {{ min-height: 130px; resize: vertical; }}
+    .form-field input:focus, .form-field textarea:focus {{ border-color: var(--primary); outline: 3px solid rgba(21, 94, 239, .14); }}
+    .privacy-field {{ display: flex; align-items: flex-start; gap: 9px; color: var(--muted); font-size: .88rem; text-align: left; }}
+    .privacy-field input {{ margin-top: 6px; }}
+    .submit-button {{ min-height: 52px; border: 0; border-radius: 999px; color: #fff; background: var(--primary); font: inherit; font-weight: 900; cursor: pointer; }}
+    .submit-button:disabled {{ cursor: wait; opacity: .65; }}
+    .form-status {{ min-height: 1.7em; margin: 0 !important; color: var(--primary-dark) !important; font-weight: 800; }}
+    .form-note {{ margin: -8px 0 0 !important; color: var(--muted) !important; font-size: .8rem; }}
     footer {{ padding: 28px 0; color: var(--muted); background: #f8fafc; text-align: center; }}
 
     @media (max-width: 900px) {{
       .nav a:not(.header-cta) {{ display: none; }}
-      .hero-grid, .ai-box {{ grid-template-columns: 1fr; }}
+      .hero-grid, .ai-box, .contact-grid {{ grid-template-columns: 1fr; }}
       .hero-visual {{ min-height: 390px; }}
       .floating-card {{ right: 18px; }}
       .process-grid {{ grid-template-columns: repeat(2, 1fr); }}
@@ -321,6 +336,9 @@ class SiteHtmlRenderer:
       .service-card {{ min-height: 0; padding: 28px; }}
       .card-cta {{ margin-top: 28px; }}
       .ai-box {{ padding: 34px 24px; gap: 34px; }}
+      .contact-grid {{ gap: 34px; }}
+      .form-row {{ grid-template-columns: 1fr; }}
+      .contact-form {{ padding: 26px 20px; }}
     }}
   </style>
 </head>
@@ -417,10 +435,34 @@ class SiteHtmlRenderer:
     </section>
 
     <section class="closing" id="contact">
-      <div class="container">
-        <h2>좋은 홈페이지는<br>좋은 대화에서 시작됩니다.</h2>
-        <p>{business_name}과 함께 사업에 맞는 방향을 찾아보세요.</p>
-        <a class="secondary-cta" href="#top">상담 준비하기</a>
+      <div class="container contact-grid">
+        <div>
+          <h2>좋은 홈페이지는<br>좋은 대화에서 시작됩니다.</h2>
+          <p>{business_name}과 함께 사업에 맞는 방향을 찾아보세요.</p>
+        </div>
+        <form class="contact-form" id="contact-form" data-webhook-url="" novalidate>
+          <div class="form-row">
+            <div class="form-field">
+              <label for="contact-name">이름 *</label>
+              <input id="contact-name" name="name" type="text" autocomplete="name" required>
+            </div>
+            <div class="form-field">
+              <label for="contact-phone">연락처 *</label>
+              <input id="contact-phone" name="phone" type="tel" autocomplete="tel" required>
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="contact-message">문의 내용 *</label>
+            <textarea id="contact-message" name="message" required></textarea>
+          </div>
+          <label class="privacy-field">
+            <input name="privacy" type="checkbox" required>
+            <span>상담을 위한 개인정보 수집 및 이용에 동의합니다. *</span>
+          </label>
+          <button class="submit-button" type="submit">무료 상담 신청하기</button>
+          <p class="form-status" role="status" aria-live="polite"></p>
+          <p class="form-note">화면 테스트 모드입니다. 실제 전송은 data-webhook-url에 n8n Webhook 주소를 입력하면 활성화됩니다.</p>
+        </form>
       </div>
     </section>
   </main>
@@ -428,6 +470,8 @@ class SiteHtmlRenderer:
   <footer><div class="container">
     <small>&copy; {business_name}. All rights reserved.</small>
   </div></footer>
+  <script>
+{self.render_script()}  </script>
 </body>
 </html>
 """
@@ -450,6 +494,7 @@ class SiteHtmlRenderer:
 
         standalone_html = self.render(plan)
         css, bundled_html = self._extract_external_css(standalone_html)
+        _, bundled_html = self._extract_inline_script(bundled_html)
         bundled_html = bundled_html.replace(
             "</head>\n",
             f"{self._EXTERNAL_SCRIPT}</head>\n",
@@ -486,6 +531,15 @@ class SiteHtmlRenderer:
         )
         return css, bundled_html
 
+    @classmethod
+    def _extract_inline_script(cls, html: str) -> tuple[str, str]:
+        script_start = html.index(cls._SCRIPT_OPEN)
+        content_start = script_start + len(cls._SCRIPT_OPEN)
+        script_end = html.index(cls._SCRIPT_CLOSE, content_start)
+        script = html[content_start:script_end]
+        bundled_html = html[:script_start] + html[script_end + len(cls._SCRIPT_CLOSE) :]
+        return script, bundled_html
+
     @staticmethod
     def render_script() -> str:
         return """document.querySelectorAll('a[href^="#"]').forEach((link) => {
@@ -498,6 +552,53 @@ class SiteHtmlRenderer:
     }
   });
 });
+
+const contactForm = document.querySelector("#contact-form");
+
+if (contactForm) {
+  contactForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const status = contactForm.querySelector(".form-status");
+    const submitButton = contactForm.querySelector(".submit-button");
+
+    if (!contactForm.checkValidity()) {
+      contactForm.reportValidity();
+      status.textContent = "필수 항목을 모두 입력해 주세요.";
+      return;
+    }
+
+    const webhookUrl = contactForm.dataset.webhookUrl.trim();
+    const formData = new FormData(contactForm);
+    const payload = {
+      name: formData.get("name"),
+      phone: formData.get("phone"),
+      message: formData.get("message"),
+      privacy: formData.get("privacy") === "on",
+    };
+
+    submitButton.disabled = true;
+    status.textContent = "문의 내용을 전송하고 있습니다.";
+
+    try {
+      if (webhookUrl) {
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      }
+      contactForm.reset();
+      status.textContent = "상담 신청이 완료되었습니다. 확인 후 연락드리겠습니다.";
+    } catch (error) {
+      status.textContent = "전송하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+}
 """
 
     @staticmethod
