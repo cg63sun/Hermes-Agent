@@ -54,3 +54,36 @@ def test_ollama_generator_returns_response(
     }
 
     assert request_data["timeout"] == 30.0
+
+def test_ollama_generator_sends_json_schema(
+    monkeypatch: Any,
+) -> None:
+    request_data: dict[str, Any] = {}
+
+    def mock_post(
+        url: str,
+        json: dict[str, Any],
+        timeout: float,
+    ) -> MockResponse:
+        request_data["json"] = json
+        return MockResponse()
+
+    monkeypatch.setattr(httpx, "post", mock_post)
+
+    json_schema = {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+            },
+        },
+        "required": ["name"],
+    }
+
+    generator = OllamaGenerator(
+        json_schema=json_schema,
+    )
+
+    generator.generate("JSON으로 작성하세요.")
+
+    assert request_data["json"]["format"] == json_schema

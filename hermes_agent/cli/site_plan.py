@@ -157,6 +157,55 @@ def run_site_plan(
             model=generation_model,
             base_url=ollama_url,
             timeout=generation_timeout,
+            json_schema={
+                "type": "object",
+                "properties": {
+                    "concept": {
+                        "type": "string",
+                    },
+                    "key_messages": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                        },
+                    },
+                    "sections": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                },
+                                "purpose": {
+                                    "type": "string",
+                                },
+                                "headline": {
+                                    "type": "string",
+                                },
+                                "content": {
+                                    "type": "string",
+                                },
+                                "call_to_action": {
+                                    "type": "string",
+                                },
+                            },
+                            "required": [
+                                "name",
+                                "purpose",
+                                "headline",
+                                "content",
+                                "call_to_action",
+                            ],
+                        },
+                    },
+                },
+                "required": [
+                    "concept",
+                    "key_messages",
+                    "sections",
+                ],
+            },
         ),
     )
     plan = service.generate(

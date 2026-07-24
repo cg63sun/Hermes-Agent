@@ -79,10 +79,12 @@ def test_run_site_plan_saves_markdown_json_and_html(
             model: str,
             base_url: str,
             timeout: float,
+            json_schema: dict | None = None,
         ) -> None:
             captured["model"] = model
             captured["base_url"] = base_url
             captured["generation_timeout"] = timeout
+            captured["json_schema"] = json_schema
 
     class FakeSitePlanGenerator:
         def __init__(self, *, generator) -> None:
@@ -127,6 +129,21 @@ def test_run_site_plan_saves_markdown_json_and_html(
     assert captured["model"] == "qwen3:8b"
     assert captured["urls"] == ["https://example.com"]
     assert captured["generation_timeout"] == 450.0
+    json_schema = captured["json_schema"]
+
+    assert isinstance(json_schema, dict)
+    assert json_schema["required"] == [
+        "concept",
+        "key_messages",
+        "sections",
+    ]
+    assert json_schema["properties"]["sections"]["items"]["required"] == [
+        "name",
+        "purpose",
+        "headline",
+        "content",
+        "call_to_action",
+    ]
     assert captured["research_options"]["generation_timeout"] == 450.0
     assert captured["report"].answer.startswith("경쟁사는")
     assert "# 여수넷 홈페이지 기획안" in markdown_path.read_text(
