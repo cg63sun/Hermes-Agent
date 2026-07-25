@@ -16,12 +16,18 @@ class SiteHtmlRenderer:
     _EXTERNAL_STYLESHEET = '  <link rel="stylesheet" href="assets/style.css">\n'
     _EXTERNAL_SCRIPT = '  <script src="assets/script.js" defer></script>\n'
 
-    def render(self, plan: SitePlan) -> str:
+    def render(
+        self,
+        plan: SitePlan,
+        *,
+        webhook_url: str = "",
+    ) -> str:
         business_name = escape(plan.business_name)
         business_type = escape(plan.business_type)
         target_audience = escape(plan.target_audience)
         goal = escape(plan.goal)
         concept = escape(plan.concept)
+        webhook_url_value = escape(webhook_url.strip(), quote=True)
 
         key_messages = "\n".join(
             f'          <li class="message-item">{escape(message)}</li>'
@@ -440,7 +446,7 @@ class SiteHtmlRenderer:
           <h2>좋은 홈페이지는<br>좋은 대화에서 시작됩니다.</h2>
           <p>{business_name}과 함께 사업에 맞는 방향을 찾아보세요.</p>
         </div>
-        <form class="contact-form" id="contact-form" data-webhook-url="" novalidate>
+        <form class="contact-form" id="contact-form" data-webhook-url="{webhook_url_value}" novalidate>
           <div class="form-row">
             <div class="form-field">
               <label for="contact-name">이름 *</label>
@@ -476,23 +482,37 @@ class SiteHtmlRenderer:
 </html>
 """
 
-    def save(self, plan: SitePlan, file_path: str | Path) -> Path:
+    def save(
+        self,
+        plan: SitePlan,
+        file_path: str | Path,
+        *,
+        webhook_url: str = "",
+    ) -> Path:
         path = Path(file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.render(plan), encoding="utf-8")
+        path.write_text(
+            self.render(plan, webhook_url=webhook_url),
+            encoding="utf-8",
+        )
         return path
 
     def save_bundle(
         self,
         plan: SitePlan,
         output_dir: str | Path,
+        *,
+        webhook_url: str = "",
     ) -> tuple[Path, Path, Path]:
         """Save a deployable site with separate HTML, CSS, and JavaScript."""
         directory = Path(output_dir)
         assets_directory = directory / "assets"
         assets_directory.mkdir(parents=True, exist_ok=True)
 
-        standalone_html = self.render(plan)
+        standalone_html = self.render(
+            plan,
+            webhook_url=webhook_url,
+        )
         css, bundled_html = self._extract_external_css(standalone_html)
         _, bundled_html = self._extract_inline_script(bundled_html)
         bundled_html = bundled_html.replace(

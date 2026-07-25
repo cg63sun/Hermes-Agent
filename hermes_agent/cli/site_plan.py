@@ -63,8 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--source",
-        default=None,
-        help="경쟁사 검색 대상을 제한할 출처 URL",
+        help="조사 결과에 표시할 출처 이름",
     )
     parser.add_argument(
         "--chunk-size",
@@ -112,6 +111,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="HTML, CSS, JavaScript를 분리한 홈페이지 저장 폴더",
     )
     parser.add_argument(
+        "--webhook-url",
+        default="",
+        help="상담 폼에서 사용할 n8n Webhook URL",
+    )
+    parser.add_argument(
         "--stop-on-error",
         action="store_true",
         help="웹사이트 수집 실패 시 즉시 중단",
@@ -139,6 +143,7 @@ def run_site_plan(
     json_output: str | Path | None = None,
     html_output: str | Path | None = None,
     site_output_dir: str | Path | None = None,
+    webhook_url: str = "",
     continue_on_error: bool = True,
 ) -> SitePlan:
     answer = run_research(
@@ -159,7 +164,6 @@ def run_site_plan(
         question=question.strip(),
         answer=answer,
     )
-
     service = SitePlanGenerator(
         generator=OllamaGenerator(
             model=generation_model,
@@ -216,7 +220,6 @@ def run_site_plan(
             },
         ),
     )
-
     plan = service.generate(
         report,
         business_name=business_name,
@@ -242,6 +245,7 @@ def run_site_plan(
         html_path = SiteHtmlRenderer().save(
             plan,
             html_output,
+            webhook_url=webhook_url,
         )
         print(f"HTML 저장   : {html_path}")
 
@@ -249,6 +253,7 @@ def run_site_plan(
         site_paths = SiteHtmlRenderer().save_bundle(
             plan,
             site_output_dir,
+            webhook_url=webhook_url,
         )
         print(f"사이트 저장 : {Path(site_output_dir)}")
 
@@ -283,6 +288,7 @@ def main() -> None:
             json_output=args.json_output,
             html_output=args.html_output,
             site_output_dir=args.site_output_dir,
+            webhook_url=args.webhook_url,
             continue_on_error=not args.stop_on_error,
         )
     except ValueError as error:
@@ -301,4 +307,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    
